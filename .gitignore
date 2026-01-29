@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 環境變數
+.env
+*.env
+!.env.example
+
+# 資料庫
+*.db
+*.sqlite
+
+# 日誌
+*.log
+logs/
+
+# 測試
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Docker
+.dockerignore
+
+# macOS
+.DS_Store
+
+# 臨時檔案
+*.tmp
+tmp/
+temp/
