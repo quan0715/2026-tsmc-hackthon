@@ -19,6 +19,23 @@ export default function RegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+
+    // 前端驗證
+    if (!email.includes('@')) {
+      setError('請輸入有效的 Email 地址')
+      return
+    }
+
+    if (username.length < 3) {
+      setError('使用者名稱必須至少 3 個字元')
+      return
+    }
+
+    if (password.length < 8) {
+      setError('密碼必須至少 8 個字元')
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -29,7 +46,27 @@ export default function RegisterPage() {
 
       navigate('/projects')
     } catch (err: any) {
-      setError(err.response?.data?.detail || '註冊失敗')
+      // 詳細的錯誤處理
+      const status = err.response?.status
+      const detail = err.response?.data?.detail
+
+      if (status === 400 || status === 422) {
+        if (detail?.includes('email') || detail?.includes('Email')) {
+          setError('❌ Email 已被使用或格式不正確')
+        } else if (detail?.includes('username') || detail?.includes('Username')) {
+          setError('❌ 使用者名稱已被使用或格式不正確')
+        } else if (detail?.includes('password') || detail?.includes('Password')) {
+          setError('⚠️ 密碼格式不正確（必須至少 8 個字元）')
+        } else {
+          setError('⚠️ ' + detail || '輸入格式不正確，請檢查所有欄位')
+        }
+      } else if (status === 500) {
+        setError('🔧 伺服器錯誤，請稍後再試')
+      } else if (err.code === 'ERR_NETWORK') {
+        setError('📡 無法連線到伺服器，請檢查網路連線')
+      } else {
+        setError(detail || '註冊失敗，請重試')
+      }
     } finally {
       setLoading(false)
     }
@@ -44,8 +81,12 @@ export default function RegisterPage() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 text-red-600 p-3 rounded text-sm">
-                {error}
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                <span className="text-xl flex-shrink-0">⚠️</span>
+                <div className="flex-1">
+                  <div className="font-semibold mb-1">註冊失敗</div>
+                  <div className="text-sm">{error}</div>
+                </div>
               </div>
             )}
 
@@ -58,6 +99,7 @@ export default function RegisterPage() {
                 required
                 placeholder="your@email.com"
               />
+              <p className="text-xs text-gray-500 mt-1">必須是有效的 Email 格式</p>
             </div>
 
             <div>
@@ -67,8 +109,10 @@ export default function RegisterPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
+                minLength={3}
                 placeholder="username"
               />
+              <p className="text-xs text-gray-500 mt-1">至少 3 個字元，最多 50 個字元</p>
             </div>
 
             <div>
@@ -78,9 +122,10 @@ export default function RegisterPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
-                placeholder="至少 6 個字元"
+                minLength={8}
+                placeholder="至少 8 個字元"
               />
+              <p className="text-xs text-gray-500 mt-1">至少 8 個字元，最多 100 個字元</p>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>

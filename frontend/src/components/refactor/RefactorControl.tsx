@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { startAgentRunAPI, getAgentRunsAPI, stopAgentRunAPI, resumeAgentRunAPI } from '@/services/agent.service'
 import { reprovisionProjectAPI } from '@/services/project.service'
 import { AgentLogStream } from '@/components/agent/AgentLogStream'
+import { TaskList, type Task } from '@/components/agent/TaskList'
 import type { AgentRunDetail } from '@/types/agent.types'
 import { PlayCircle, StopCircle, RefreshCw, RotateCcw } from 'lucide-react'
 
@@ -22,6 +23,7 @@ export function RefactorControl({ projectId, projectStatus, onProjectUpdate }: R
   const [isReprovisioning, setIsReprovisioning] = useState(false)
   const [showLogs, setShowLogs] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [tasks, setTasks] = useState<Task[]>([])
 
   // 載入當前執行的 run
   useEffect(() => {
@@ -296,6 +298,11 @@ export function RefactorControl({ projectId, projectStatus, onProjectUpdate }: R
           </div>
         )}
 
+        {/* 任務清單 */}
+        {currentRun && showLogs && tasks.length > 0 && (
+          <TaskList tasks={tasks} />
+        )}
+
         {/* 日誌串流 */}
         {currentRun && showLogs && (
           <div className="mt-4">
@@ -303,6 +310,7 @@ export function RefactorControl({ projectId, projectStatus, onProjectUpdate }: R
               projectId={projectId}
               runId={currentRun.id}
               autoStart={true}
+              onTasksUpdate={setTasks}
             />
           </div>
         )}

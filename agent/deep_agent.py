@@ -23,16 +23,19 @@ class RefactorAgent:
         self,
         model=None,
         verbose: bool = True,
+        stop_check_callback=None,
     ):
         """初始化 RefactorAgent
 
         Args:
             model: LLM 模型實例
             verbose: 是否顯示詳細的 chunk 解析資訊
+            stop_check_callback: 可選的停止檢查回調函數，返回 True 表示應該停止
         """
         self.model = model
         self.verbose = verbose
         self.root_dir = "/workspace/"
+        self.stop_check_callback = stop_check_callback
         self._agent_init()
 
     def _agent_init(self):
@@ -78,8 +81,21 @@ class RefactorAgent:
         })
 
         # 使用 ChunkParser 解析每個 chunk
-        for chunk in result:
-            parser.parse(chunk)
+        try:
+            for chunk in result:
+                # 檢查是否應該停止
+                if self.stop_check_callback and self.stop_check_callback():
+                    print(f"\n{'='*60}", flush=True)
+                    print(f"⏹️  檢測到停止信號，中斷 Agent 執行", flush=True)
+                    print(f"{'='*60}\n", flush=True)
+                    raise KeyboardInterrupt("Agent stopped by user")
+
+                parser.parse(chunk)
+        except KeyboardInterrupt:
+            print(f"\n{'='*60}", flush=True)
+            print(f"⏹️  Agent 執行已被中斷", flush=True)
+            print(f"{'='*60}\n", flush=True)
+            raise
 
         # 顯示總結
         parser.print_summary()

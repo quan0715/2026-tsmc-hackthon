@@ -44,7 +44,7 @@ export interface AgentRunListResponse {
 export interface AgentLogEvent {
   timestamp?: string
   type: 'llm_response' | 'ai_content' | 'tool_call' | 'tool_calls' | 'tool_result' | 'tools_execution' |
-        'thinking' | 'log' | 'status' | 'token_usage' | 'response_metadata' | 'todo_update' | 'event' | 'message'
+        'thinking' | 'log' | 'status' | 'token_usage' | 'response_metadata' | 'todo_update' | 'task_list' | 'event' | 'message'
   message?: string
   event_type?: string
   content?: any

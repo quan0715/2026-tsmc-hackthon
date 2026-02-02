@@ -15,13 +15,39 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // 前端驗證
+    if (username.length < 3) {
+      setError('使用者名稱必須至少 3 個字元')
+      return
+    }
+
+    if (password.length < 8) {
+      setError('密碼必須至少 8 個字元')
+      return
+    }
+
     try {
       setLoading(true)
       setError('')
       await login(username, password)
       navigate('/projects')
     } catch (err: any) {
-      setError(err.response?.data?.detail || '登入失敗')
+      // 詳細的錯誤處理
+      const status = err.response?.status
+      const detail = err.response?.data?.detail
+
+      if (status === 401) {
+        setError('❌ 使用者名稱或密碼錯誤，請重新輸入')
+      } else if (status === 422) {
+        setError('⚠️ 輸入格式不正確，請檢查使用者名稱和密碼')
+      } else if (status === 500) {
+        setError('🔧 伺服器錯誤，請稍後再試')
+      } else if (err.code === 'ERR_NETWORK') {
+        setError('📡 無法連線到伺服器，請檢查網路連線')
+      } else {
+        setError(detail || '登入失敗，請重試')
+      }
     } finally {
       setLoading(false)
     }
@@ -59,8 +85,12 @@ export default function LoginPage() {
               />
             </div>
             {error && (
-              <div className="text-sm text-red-500 bg-red-50 p-3 rounded">
-                {error}
+              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                <span className="text-xl flex-shrink-0">⚠️</span>
+                <div className="flex-1">
+                  <div className="font-semibold mb-1">登入失敗</div>
+                  <div className="text-sm">{error}</div>
+                </div>
               </div>
             )}
             <Button type="submit" className="w-full" disabled={loading}>

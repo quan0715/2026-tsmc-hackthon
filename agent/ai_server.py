@@ -35,6 +35,9 @@ tasks: Dict[str, Dict] = {}
 # 日誌儲存（用於 stream）
 task_logs: Dict[str, list] = {}
 
+# 停止標誌（用於中斷執行）
+stop_flags: Dict[str, bool] = {}
+
 class RunRequest(BaseModel):
     init_prompt: str
     verbose: bool = True
@@ -69,8 +72,9 @@ def log_task(task_id: str, message: str):
 def execute_agent(task_id: str, init_prompt: str, verbose: bool):
     """背景執行 Agent（在 BackgroundTasks 中執行）"""
     try:
-        # 初始化日誌
+        # 初始化日誌和停止標誌
         task_logs[task_id] = []
+        stop_flags[task_id] = False
 
         # 更新狀態為 RUNNING
         tasks[task_id]["status"] = TaskStatus.RUNNING
@@ -78,6 +82,13 @@ def execute_agent(task_id: str, init_prompt: str, verbose: bool):
 
         print(f"🚀 [DEBUG] Task {task_id}: 開始執行", flush=True)
         log_task(task_id, "🚀 開始執行 Agent")
+
+        # 檢查停止標誌
+        if stop_flags.get(task_id, False):
+            log_task(task_id, "⏹️  任務在初始化前被停止")
+            tasks[task_id]["status"] = TaskStatus.STOPPED
+            tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
+            return
 
         # 初始化 LLM
         print(f"🔧 [DEBUG] Task {task_id}: 初始化 LLM", flush=True)
@@ -87,16 +98,40 @@ def execute_agent(task_id: str, init_prompt: str, verbose: bool):
         print(f"✅ [DEBUG] Task {task_id}: LLM 初始化完成", flush=True)
         log_task(task_id, "✅ LLM 初始化完成")
 
+        # 再次檢查停止標誌
+        if stop_flags.get(task_id, False):
+            log_task(task_id, "⏹️  任務在 LLM 初始化後被停止")
+            tasks[task_id]["status"] = TaskStatus.STOPPED
+            tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
+            return
+
         # 建立並執行 RefactorAgent
         print(f"🤖 [DEBUG] Task {task_id}: 建立 RefactorAgent", flush=True)
         log_task(task_id, "🤖 建立 RefactorAgent...")
-        agent = RefactorAgent(model, verbose=verbose)
+
+        # 定義停止檢查回調
+        def should_stop():
+            """檢查是否應該停止執行"""
+            return stop_flags.get(task_id, False)
+
+        agent = RefactorAgent(
+            model=model,
+            verbose=verbose,
+            stop_check_callback=should_stop
+        )
         print(f"✅ [DEBUG] Task {task_id}: RefactorAgent 建立完成", flush=True)
         log_task(task_id, "✅ RefactorAgent 建立完成")
 
         # 定義事件回調函數，將 chunk 事件轉發到日誌
+        # 並在每次回調時檢查停止標誌
         def handle_chunk_event(event_type: str, data: dict):
-            """處理 ChunkParser 的事件"""
+            """處理 ChunkParser 的事件（帶停止檢查）"""
+            # 檢查停止標誌
+            if stop_flags.get(task_id, False):
+                log_task(task_id, "⏹️  檢測到停止信號，準備中斷執行")
+                # 拋出異常來中斷執行
+                raise KeyboardInterrupt("Task stopped by user")
+
             import json
             # 將事件序列化為 JSON 並記錄
             event_log = {
@@ -107,14 +142,29 @@ def execute_agent(task_id: str, init_prompt: str, verbose: bool):
 
         print(f"▶️  [DEBUG] Task {task_id}: 開始執行 Agent", flush=True)
         log_task(task_id, f"▶️  執行 Agent，init_prompt: {init_prompt[:100]}...")
+
+        # 執行 Agent（可能會被 KeyboardInterrupt 中斷）
         agent.run(user_message=init_prompt, event_callback=handle_chunk_event)
 
-        # 標記完成
-        tasks[task_id]["status"] = TaskStatus.SUCCESS
-        tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
-        print(f"✅ [DEBUG] Task {task_id}: Agent 執行完成", flush=True)
-        log_task(task_id, "✅ Agent 執行完成")
+        # 檢查是否被停止
+        if stop_flags.get(task_id, False):
+            tasks[task_id]["status"] = TaskStatus.STOPPED
+            tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
+            log_task(task_id, "⏹️  任務執行已被停止")
+        else:
+            # 標記完成
+            tasks[task_id]["status"] = TaskStatus.SUCCESS
+            tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
+            print(f"✅ [DEBUG] Task {task_id}: Agent 執行完成", flush=True)
+            log_task(task_id, "✅ Agent 執行完成")
 
+    except KeyboardInterrupt:
+        # 用戶停止任務
+        print(f"⏹️  [DEBUG] Task {task_id}: 任務被用戶中斷", flush=True)
+        log_task(task_id, "⏹️  任務已被用戶停止")
+        tasks[task_id]["status"] = TaskStatus.STOPPED
+        tasks[task_id]["error_message"] = "Task stopped by user"
+        tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
     except Exception as e:
         error_msg = f"Agent execution failed: {str(e)}"
         print(f"❌ [DEBUG] Task {task_id}: 錯誤 - {error_msg}", flush=True)
@@ -125,6 +175,10 @@ def execute_agent(task_id: str, init_prompt: str, verbose: bool):
         tasks[task_id]["status"] = TaskStatus.FAILED
         tasks[task_id]["error_message"] = error_msg
         tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
+    finally:
+        # 清理停止標誌
+        if task_id in stop_flags:
+            del stop_flags[task_id]
 
 
 @app.post("/run", response_model=RunResponse)
@@ -280,8 +334,7 @@ async def stream_task_logs(task_id: str):
 async def stop_task(task_id: str):
     """停止執行中的任務
 
-    注意：由於 Agent 在背景執行且無法中斷，
-    這裡只是將狀態標記為 STOPPED，實際執行可能仍在進行。
+    設置停止標誌，Agent 會在下一次事件回調時檢測並中斷執行。
     """
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -295,18 +348,16 @@ async def stop_task(task_id: str):
             detail=f"Cannot stop task with status: {task['status']}"
         )
 
-    # 標記為已停止
-    task["status"] = TaskStatus.STOPPED
-    task["finished_at"] = datetime.utcnow().isoformat()
-    task["error_message"] = "Task stopped by user"
+    # 設置停止標誌
+    stop_flags[task_id] = True
 
-    log_task(task_id, "⏹️  任務已被用戶停止")
-    logger.info(f"[{task_id}] Task stopped by user")
+    log_task(task_id, "⏹️  收到停止信號，正在中斷任務...")
+    logger.info(f"[{task_id}] Stop signal received, interrupting task...")
 
     return {
         "task_id": task_id,
-        "status": TaskStatus.STOPPED,
-        "message": "Task has been stopped"
+        "status": "stopping",
+        "message": "Stop signal sent, task will be interrupted at next checkpoint"
     }
 
 

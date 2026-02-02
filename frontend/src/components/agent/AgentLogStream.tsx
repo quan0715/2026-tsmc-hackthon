@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { streamAgentLogsAPI } from '@/services/agent.service'
 import type { AgentLogEvent } from '@/types/agent.types'
+import type { Task } from './TaskList'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 
@@ -8,23 +9,30 @@ interface Props {
   projectId: string
   runId: string
   autoStart?: boolean
+  onTasksUpdate?: (tasks: Task[]) => void
 }
 
-export function AgentLogStream({ projectId, runId, autoStart = true }: Props) {
+export function AgentLogStream({ projectId, runId, autoStart = true, onTasksUpdate }: Props) {
   const [logs, setLogs] = useState<AgentLogEvent[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [autoScroll, setAutoScroll] = useState(false) // 預設不自動滾動，方便 debug
   const cancelStreamRef = useRef<(() => void) | null>(null)
+  const isMountedRef = useRef(true)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsContainerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    isMountedRef.current = true
     if (autoStart) {
       startStream()
     }
     return () => {
-      cancelStreamRef.current?.()
+      isMountedRef.current = false
+      if (cancelStreamRef.current) {
+        cancelStreamRef.current()
+        cancelStreamRef.current = null
+      }
     }
   }, [runId, autoStart])
 
@@ -36,6 +44,12 @@ export function AgentLogStream({ projectId, runId, autoStart = true }: Props) {
   }, [logs, autoScroll])
 
   const startStream = async () => {
+    // 先取消舊的串流（如果存在）
+    if (cancelStreamRef.current) {
+      cancelStreamRef.current()
+      cancelStreamRef.current = null
+    }
+
     setIsStreaming(true)
     setError(null)
     setLogs([])
@@ -45,7 +59,40 @@ export function AgentLogStream({ projectId, runId, autoStart = true }: Props) {
         projectId,
         runId,
         (event) => {
+          // 只在組件仍掛載時更新狀態
+          if (!isMountedRef.current) {
+            return
+          }
           setLogs((prev) => [...prev, event])
+
+          // 處理任務清單更新
+          if ((event.type === 'task_list' || event.type === 'todo_update') && event.content?.tasks) {
+            onTasksUpdate?.(event.content.tasks)
+          }
+
+          // 處理 write_todos 工具執行結果
+          if (event.type === 'tools_execution' && event.content?.results) {
+            for (const result of event.content.results) {
+              if (result.name === 'write_todos' && result.content) {
+                // 解析 "Updated todo list to [...]" 格式
+                const match = result.content.match(/Updated todo list to (\[.*\])/)
+                if (match && match[1]) {
+                  try {
+                    // 將 Python dict 格式轉為標準 JSON
+                    const jsonStr = match[1]
+                      .replace(/'/g, '"')  // 單引號轉雙引號
+                      .replace(/True/g, 'true')
+                      .replace(/False/g, 'false')
+                      .replace(/None/g, 'null')
+                    const tasks = JSON.parse(jsonStr)
+                    onTasksUpdate?.(tasks)
+                  } catch (e) {
+                    console.warn('解析 write_todos 結果失敗', e)
+                  }
+                }
+              }
+            }
+          }
         },
         (err) => {
           setError(err.message)
