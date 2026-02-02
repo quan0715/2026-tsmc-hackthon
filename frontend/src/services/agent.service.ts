@@ -122,9 +122,13 @@ export const streamAgentLogsAPI = async (
             if (currentData) {
               try {
                 const data = JSON.parse(currentData)
+                // 將解析的數據放入 content 欄位，保持一致性
                 onMessage({
                   type: currentEvent as any,
-                  ...data
+                  content: data,
+                  // 同時保留一些常用欄位在頂層（向後兼容）
+                  timestamp: data.timestamp,
+                  message: data.message,
                 })
               } catch (e) {
                 console.warn('解析 SSE 資料失敗', e, currentData)

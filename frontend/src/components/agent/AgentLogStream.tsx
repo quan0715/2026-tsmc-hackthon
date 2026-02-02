@@ -396,8 +396,26 @@ function ToolResultsDisplay({ event }: { event: AgentLogEvent }) {
 function TokenUsageDisplay({ event }: { event: AgentLogEvent }) {
   const { timestamp, content } = event
 
+  // Debug: 記錄收到的數據
+  console.log('[TokenUsageDisplay] event:', event)
+  console.log('[TokenUsageDisplay] content:', content)
+
   // 提取 token 使用資訊
   const usage = content?.usage || content
+
+  // 如果完全沒有數據，顯示錯誤訊息
+  if (!content) {
+    return (
+      <div className="bg-yellow-950/10 border-l-2 border-yellow-500 mb-2 py-2 px-3 rounded">
+        <div className="text-yellow-300 flex items-start gap-2">
+          <span className="flex-shrink-0 text-base mt-0.5">🔢</span>
+          <div className="flex-1 font-sans text-sm">
+            ⚠️ Token Usage 事件無內容數據
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!usage || typeof usage !== 'object') {
     // 無法解析，顯示原始數據
@@ -480,6 +498,24 @@ function TokenUsageDisplay({ event }: { event: AgentLogEvent }) {
  */
 function ResponseMetadataDisplay({ event }: { event: AgentLogEvent }) {
   const { timestamp, content } = event
+
+  // Debug: 記錄收到的數據
+  console.log('[ResponseMetadataDisplay] event:', event)
+  console.log('[ResponseMetadataDisplay] content:', content)
+
+  // 如果完全沒有數據，顯示錯誤訊息
+  if (!content) {
+    return (
+      <div className="bg-gray-900/20 border-l-2 border-gray-600 mb-2 py-2 px-3 rounded">
+        <div className="text-gray-400 flex items-start gap-2">
+          <span className="flex-shrink-0 text-base mt-0.5">ℹ️</span>
+          <div className="flex-1 font-sans text-sm">
+            ⚠️ Response Metadata 事件無內容數據
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   // 提取 metadata
   const metadata = content?.metadata || content
