@@ -2,11 +2,12 @@
 from datetime import datetime
 from typing import Optional, List
 from bson import ObjectId
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 
 from ..models.project import Project, ProjectStatus
 from ..schemas.project import CreateProjectRequest, UpdateProjectRequest
 from .container_service import ContainerService
+from ..utils.mongodb_helpers import validate_and_convert_object_id, objectid_to_str
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,17 +16,19 @@ logger = logging.getLogger(__name__)
 class ProjectService:
     """專案服務"""
 
-    def __init__(self, db: AsyncIOMotorDatabase):
+    def __init__(self, db: AsyncDatabase):
         self.db = db
         self.collection = db.projects
 
-    async def create_project(self, request: CreateProjectRequest) -> Project:
+    async def create_project(self, request: CreateProjectRequest, owner_id: str, owner_email: str = None) -> Project:
         """建立專案"""
         project = Project(
             repo_url=request.repo_url,
             branch=request.branch,
             init_prompt=request.init_prompt,
             status=ProjectStatus.CREATED,
+            owner_id=owner_id,
+            owner_email=owner_email,
         )
 
         # 轉換為字典並移除 id (由 MongoDB 自動生成)
@@ -38,9 +41,8 @@ class ProjectService:
 
     async def get_project_by_id(self, project_id: str) -> Optional[Project]:
         """根據 ID 查詢專案"""
-        try:
-            obj_id = ObjectId(project_id)
-        except Exception:
+        obj_id = validate_and_convert_object_id(project_id, "project_id")
+        if not obj_id:
             return None
 
         project_dict = await self.collection.find_one({"_id": obj_id})
@@ -48,7 +50,7 @@ class ProjectService:
             return None
 
         # 轉換 ObjectId 為字串
-        project_dict["_id"] = str(project_dict["_id"])
+        objectid_to_str(project_dict)
         return Project(**project_dict)
 
     async def get_project_with_docker_status(
@@ -84,14 +86,19 @@ class ProjectService:
         return result
 
     async def list_projects(
-        self, skip: int = 0, limit: int = 100
+        self, skip: int = 0, limit: int = 100, owner_id: Optional[str] = None
     ) -> tuple[List[Project], int]:
-        """列出所有專案"""
+        """列出所有專案（可選擇過濾特定用戶的專案）"""
+        # 建立查詢條件
+        query = {}
+        if owner_id:
+            query["owner_id"] = owner_id
+
         # 查詢總數
-        total = await self.collection.count_documents({})
+        total = await self.collection.count_documents(query)
 
         # 查詢專案列表
-        cursor = self.collection.find().skip(skip).limit(limit).sort("created_at", -1)
+        cursor = self.collection.find(query).skip(skip).limit(limit).sort("created_at", -1)
         projects = []
 
         async for project_dict in cursor:
@@ -104,9 +111,8 @@ class ProjectService:
         self, project_id: str, update: UpdateProjectRequest
     ) -> Optional[Project]:
         """更新專案"""
-        try:
-            obj_id = ObjectId(project_id)
-        except Exception:
+        obj_id = validate_and_convert_object_id(project_id, "project_id")
+        if not obj_id:
             return None
 
         # 只更新提供的欄位
@@ -175,8 +181,11 @@ class ProjectService:
                 logger.warning(f"刪除容器失敗: {e}")
 
         # 刪除資料庫記錄
+        obj_id = validate_and_convert_object_id(project_id, "project_id")
+        if not obj_id:
+            return False
+
         try:
-            obj_id = ObjectId(project_id)
             result = await self.collection.delete_one({"_id": obj_id})
 
             if result.deleted_count > 0:
@@ -205,6 +214,14 @@ class ProjectService:
             await self._update_project_status(
                 project_id, ProjectStatus.PROVISIONING, last_error=None
             )
+
+            # 建立主機目錄結構
+            import os
+            from ..config import settings
+            project_dir = f"{settings.docker_volume_prefix}/{project_id}"
+            os.makedirs(f"{project_dir}/repo", exist_ok=True)
+            os.makedirs(f"{project_dir}/artifacts", exist_ok=True)
+            logger.info(f"建立專案目錄: {project_dir}")
 
             # 建立容器
             logger.info(f"建立容器: 專案 {project_id}")
@@ -259,9 +276,8 @@ class ProjectService:
         last_error: str = None,
     ) -> None:
         """更新專案狀態"""
-        try:
-            obj_id = ObjectId(project_id)
-        except Exception:
+        obj_id = validate_and_convert_object_id(project_id, "project_id")
+        if not obj_id:
             return
 
         update_dict = {

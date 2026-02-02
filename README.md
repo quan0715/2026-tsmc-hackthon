@@ -8,6 +8,7 @@
 - ✅ RESTful API 管理專案生命週期
 - ✅ 即時日誌串流 (SSE)
 - ✅ Git repository 整合
+- ✅ AI 重構邏輯僅在容器內的 `/agent` 模組執行，後端只負責觸發與監控
 
 ## 技術棧
 
@@ -37,9 +38,13 @@
    cp backend/.env.example backend/.env
    ```
 
-3. **建立基礎容器映像**
+3. **建立基礎容器映像（包含 Agent 程式碼）**
    ```bash
-   docker build -t refactor-base:latest -f devops/base-image/Dockerfile devops/base-image/
+   # 重要：必須從專案根目錄執行，以便正確複製 agent/ 目錄
+   docker build -t refactor-base:latest -f devops/base-image/Dockerfile .
+
+   # 驗證 Agent 已包含在 image 中
+   docker run --rm refactor-base:latest ls -la /workspace/agent/
    ```
 
 4. **啟動服務**
@@ -282,6 +287,7 @@ auto-refactor-agent/
 │   ├── docker-compose.yml     # 開發環境
 │   ├── api/Dockerfile         # API 服務
 │   └── base-image/Dockerfile  # 基礎容器映像
+├── agent/                      # 容器內執行的 AI Agent（唯一維護的 AI 邏輯）
 └── frontend/                   # 前端 (未來實作)
 ```
 

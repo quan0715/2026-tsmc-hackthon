@@ -44,3 +44,11 @@ htmlcov/
 *.tmp
 tmp/
 temp/
+
+# 認證 tokens
+.token
+*.token
+
+# 腳本臨時檔案
+scripts/*.tmp
+scripts/.cache

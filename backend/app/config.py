@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     docker_base_image: str = "refactor-base:latest"
     docker_network: str = "refactor-network"
     docker_volume_prefix: str = "/tmp/refactor-workspaces"
+    agent_runtime_host_path: Optional[str] = None  # DEPRECATED: Agent 已烤進 base image，不再使用
 
     # 容器資源限制
     container_cpu_limit: float = 2.0
@@ -31,6 +32,22 @@ class Settings(BaseSettings):
 
     # Log 設定
     log_level: str = "INFO"
+
+    # JWT 認證設定
+    jwt_secret_key: str = "your-secret-key-change-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_hours: int = 24
+
+    # LLM 設定 - Anthropic (已棄用，保留以便向後相容)
+    llm_provider: str = "vertex"  # "anthropic" or "vertex"
+    anthropic_api_key: str = ""
+    anthropic_model: str = "claude-sonnet-4-5-20250929"
+
+    # Vertex AI 設定
+    gcp_project_id: str = ""
+    gcp_location: str = "us-central1"
+    vertex_ai_model: str = "gemini-2.5-pro"
+    google_application_credentials: Optional[str] = None
 
     class Config:
         env_file = ".env"

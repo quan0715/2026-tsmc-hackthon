@@ -26,6 +26,8 @@ class Project(BaseModel):
     init_prompt: str  # 初始提示
     status: ProjectStatus = ProjectStatus.CREATED  # 專案狀態
     container_id: Optional[str] = None  # Docker 容器 ID
+    owner_id: str  # 擁有者用戶 ID
+    owner_email: Optional[str] = None  # 擁有者 Email（冗餘欄位，提升查詢效能）
     created_at: datetime = Field(default_factory=datetime.utcnow)  # 建立時間
     updated_at: datetime = Field(default_factory=datetime.utcnow)  # 更新時間
     last_error: Optional[str] = None  # 最後錯誤訊息

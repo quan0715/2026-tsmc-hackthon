@@ -1,6 +1,7 @@
 """容器服務層"""
 import subprocess
 import json
+import os
 from typing import Optional, Dict, Any
 import logging
 
@@ -35,12 +36,19 @@ class ContainerService:
         image: str = None,
         **kwargs
     ) -> Dict[str, Any]:
-        """建立容器"""
+        """建立容器（Agent 程式碼已烤進 base image）"""
         if image is None:
             image = settings.docker_base_image
 
         try:
+            # 準備環境變數
+            env_vars = []
+            # 傳遞 ANTHROPIC_API_KEY（如果有設定）
+            if hasattr(settings, 'anthropic_api_key') and settings.anthropic_api_key:
+                env_vars.extend(["-e", f"ANTHROPIC_API_KEY={settings.anthropic_api_key}"])
+
             # 建立容器
+            # 分別掛載 repo 和 artifacts，保留 image 中的 agent 目錄
             cmd = [
                 "docker", "create",
                 "--name", f"refactor-project-{project_id}",
@@ -49,7 +57,7 @@ class ContainerService:
                 "-i",  # stdin_open
                 "--memory", settings.container_memory_limit,
                 "--cpus", str(settings.container_cpu_limit),
-                "-v", f"{settings.docker_volume_prefix}/{project_id}:/workspace",
+                *env_vars,  # 加入環境變數
                 image
             ]
 
@@ -61,7 +69,7 @@ class ContainerService:
             )
 
             container_id = result.stdout.strip()
-            logger.info(f"建立容器: {container_id}")
+            logger.info(f"建立容器: {container_id} (Agent 已內建於 image)")
             return {"id": container_id}
         except subprocess.CalledProcessError as e:
             logger.error(f"建立容器失敗: {e.stderr}")
@@ -219,6 +227,42 @@ class ContainerService:
                 "stdout": result.stdout,
                 "stderr": result.stderr,
             }
+        except Exception as e:
+            logger.error(f"執行指令失敗: {e}")
+            raise
+
+    def exec_command_with_env(
+        self,
+        container_id: str,
+        command: str,
+        env_vars: Dict[str, str],
+        workdir: str = "/workspace"
+    ) -> Dict[str, Any]:
+        """在容器中執行指令（帶環境變數）"""
+        try:
+            cmd = ["docker", "exec"]
+
+            # 添加環境變數
+            for key, value in env_vars.items():
+                cmd.extend(["-e", f"{key}={value}"])
+
+            cmd.extend(["-w", workdir, container_id, "sh", "-c", command])
+
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 分鐘超時
+            )
+
+            return {
+                "exit_code": result.returncode,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+            }
+        except subprocess.TimeoutExpired:
+            logger.error(f"執行超時 (10 分鐘)")
+            raise Exception("執行超時")
         except Exception as e:
             logger.error(f"執行指令失敗: {e}")
             raise
