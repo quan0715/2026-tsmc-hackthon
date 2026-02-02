@@ -170,13 +170,17 @@ function LogLine({ event }: { event: AgentLogEvent }) {
       break
   }
 
-  // 特殊處理 tool_calls 和 token_usage
+  // 特殊處理 tool_calls, token_usage, response_metadata
   if (type === 'tool_calls' || type === 'tool_call') {
     return <ToolCallsDisplay event={event} />
   }
 
   if (type === 'token_usage') {
     return <TokenUsageDisplay event={event} />
+  }
+
+  if (type === 'response_metadata') {
+    return <ResponseMetadataDisplay event={event} />
   }
 
   // 智能格式化內容
@@ -283,13 +287,18 @@ function TokenUsageDisplay({ event }: { event: AgentLogEvent }) {
   // 提取 token 使用資訊
   const usage = content?.usage || content
 
-  if (!usage) {
-    return null
+  if (!usage || typeof usage !== 'object') {
+    // 無法解析，顯示原始數據
+    return <RawDataDisplay event={event} icon="🔢" color="text-yellow-300" bgColor="bg-yellow-950/10" borderColor="border-yellow-500" />
   }
 
   const inputTokens = usage.input_tokens || usage.prompt_tokens || 0
   const outputTokens = usage.output_tokens || usage.completion_tokens || 0
   const totalTokens = usage.total_tokens || inputTokens + outputTokens
+
+  // 提取快取資訊（支援多種格式）
+  const cacheRead = usage.cache_read_input_tokens || usage.input_token_details?.cache_read || 0
+  const cacheCreation = usage.cache_creation_input_tokens || usage.input_token_details?.cache_creation || 0
 
   return (
     <div className="bg-yellow-950/10 border-l-2 border-yellow-500 mb-2 py-2 px-3 rounded">
@@ -303,7 +312,9 @@ function TokenUsageDisplay({ event }: { event: AgentLogEvent }) {
               </div>
             )}
 
-            <div className="flex items-center gap-4 font-sans text-sm">
+            <div className="font-semibold font-sans text-sm mb-2">Token 使用統計</div>
+
+            <div className="flex items-center gap-4 font-sans text-sm flex-wrap">
               <div className="flex items-center gap-2">
                 <span className="text-gray-400">輸入:</span>
                 <span className="font-mono font-semibold">{inputTokens.toLocaleString()}</span>
@@ -318,17 +329,140 @@ function TokenUsageDisplay({ event }: { event: AgentLogEvent }) {
               </div>
             </div>
 
-            {/* 顯示其他 metadata */}
-            {usage.cache_creation_input_tokens && (
-              <div className="text-xs text-gray-500 mt-1 font-sans">
-                快取建立: {usage.cache_creation_input_tokens.toLocaleString()} tokens
+            {/* 顯示快取資訊 */}
+            {(cacheRead > 0 || cacheCreation > 0) && (
+              <div className="mt-2 pt-2 border-t border-yellow-900/30 space-y-1">
+                {cacheRead > 0 && (
+                  <div className="text-xs text-gray-400 font-sans flex items-center gap-2">
+                    <span>💾 快取讀取:</span>
+                    <span className="font-mono text-green-400">{cacheRead.toLocaleString()} tokens</span>
+                  </div>
+                )}
+                {cacheCreation > 0 && (
+                  <div className="text-xs text-gray-400 font-sans flex items-center gap-2">
+                    <span>📝 快取建立:</span>
+                    <span className="font-mono text-blue-400">{cacheCreation.toLocaleString()} tokens</span>
+                  </div>
+                )}
               </div>
             )}
-            {usage.cache_read_input_tokens && (
-              <div className="text-xs text-gray-500 mt-1 font-sans">
-                快取讀取: {usage.cache_read_input_tokens.toLocaleString()} tokens
+
+            {/* 顯示完整資料的摺疊選項 */}
+            <details className="cursor-pointer mt-2">
+              <summary className="text-xs text-gray-500 hover:text-gray-400 font-sans">
+                查看完整數據
+              </summary>
+              <pre className="text-xs bg-gray-800 p-2 rounded mt-1 overflow-x-auto border border-gray-700 text-gray-300">
+                {JSON.stringify(content, null, 2)}
+              </pre>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Response Metadata 專用顯示組件
+ */
+function ResponseMetadataDisplay({ event }: { event: AgentLogEvent }) {
+  const { timestamp, content } = event
+
+  // 提取 metadata
+  const metadata = content?.metadata || content
+
+  if (!metadata || typeof metadata !== 'object') {
+    // 無法解析，顯示原始數據
+    return <RawDataDisplay event={event} icon="ℹ️" color="text-gray-500" bgColor="bg-gray-900/20" borderColor="border-gray-600" />
+  }
+
+  const modelName = metadata.model || metadata.model_name || '未知'
+  const stopReason = metadata.stop_reason || '未知'
+  const messageId = metadata.id || ''
+  const provider = metadata.model_provider || ''
+
+  return (
+    <div className="bg-gray-900/20 border-l-2 border-gray-600 mb-2 py-2 px-3 rounded">
+      <div className="text-gray-400">
+        <div className="flex items-start gap-2">
+          <span className="flex-shrink-0 text-base mt-0.5">ℹ️</span>
+          <div className="flex-1">
+            {timestamp && (
+              <div className="text-xs text-gray-500 mb-1 font-sans">
+                {new Date(timestamp).toLocaleTimeString('zh-TW')}
               </div>
             )}
+
+            <div className="font-semibold font-sans text-sm mb-2">回應元數據</div>
+
+            <div className="space-y-1 text-xs font-sans">
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">模型:</span>
+                <span className="font-mono text-gray-300">{modelName}</span>
+                {provider && <span className="text-gray-600">({provider})</span>}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-500">停止原因:</span>
+                <span className="font-mono text-gray-300">{stopReason}</span>
+              </div>
+              {messageId && (
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-500">訊息 ID:</span>
+                  <span className="font-mono text-gray-500 text-[10px]">{messageId}</span>
+                </div>
+              )}
+            </div>
+
+            {/* 顯示完整資料的摺疊選項 */}
+            <details className="cursor-pointer mt-2">
+              <summary className="text-xs text-gray-500 hover:text-gray-400 font-sans">
+                查看完整數據
+              </summary>
+              <pre className="text-xs bg-gray-800 p-2 rounded mt-1 overflow-x-auto border border-gray-700 text-gray-300">
+                {JSON.stringify(content, null, 2)}
+              </pre>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 原始數據顯示組件（fallback）
+ */
+function RawDataDisplay({
+  event,
+  icon,
+  color,
+  bgColor,
+  borderColor
+}: {
+  event: AgentLogEvent
+  icon: string
+  color: string
+  bgColor: string
+  borderColor: string
+}) {
+  const { timestamp, content, type } = event
+
+  return (
+    <div className={`${bgColor} ${borderColor} border-l-2 mb-2 py-2 px-3 rounded`}>
+      <div className={color}>
+        <div className="flex items-start gap-2">
+          <span className="flex-shrink-0 text-base mt-0.5">{icon}</span>
+          <div className="flex-1">
+            {timestamp && (
+              <div className="text-xs text-gray-500 mb-1 font-sans">
+                {new Date(timestamp).toLocaleTimeString('zh-TW')}
+              </div>
+            )}
+            <div className="font-semibold font-sans text-sm mb-2">{type}</div>
+            <pre className="text-xs bg-gray-800 p-2 rounded overflow-x-auto border border-gray-700 text-gray-300">
+              {JSON.stringify(content, null, 2)}
+            </pre>
           </div>
         </div>
       </div>
