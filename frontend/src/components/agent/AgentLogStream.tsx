@@ -2,8 +2,6 @@ import { useEffect, useState, useRef } from 'react'
 import { streamAgentLogsAPI } from '@/services/agent.service'
 import type { AgentLogEvent } from '@/types/agent.types'
 import type { Task } from './TaskList'
-import { Card } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
 
 interface Props {
   projectId: string
@@ -16,16 +14,23 @@ export function AgentLogStream({ projectId, runId, autoStart = true, onTasksUpda
   const [logs, setLogs] = useState<AgentLogEvent[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [autoScroll, setAutoScroll] = useState(false) // 預設不自動滾動，方便 debug
   const cancelStreamRef = useRef<(() => void) | null>(null)
   const isMountedRef = useRef(true)
   const logsEndRef = useRef<HTMLDivElement>(null)
   const logsContainerRef = useRef<HTMLDivElement>(null)
 
+  // 當 autoStart 改變時，自動啟動或停止串流
   useEffect(() => {
     isMountedRef.current = true
     if (autoStart) {
       startStream()
+    } else {
+      // 停止串流
+      if (cancelStreamRef.current) {
+        cancelStreamRef.current()
+        cancelStreamRef.current = null
+        setIsStreaming(false)
+      }
     }
     return () => {
       isMountedRef.current = false
@@ -36,12 +41,12 @@ export function AgentLogStream({ projectId, runId, autoStart = true, onTasksUpda
     }
   }, [runId, autoStart])
 
+  // 自動滾動到最新日誌
   useEffect(() => {
-    // 只在啟用自動滾動時才滾動到底部
-    if (autoScroll && logsEndRef.current) {
+    if (logsEndRef.current) {
       logsEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [logs, autoScroll])
+  }, [logs])
 
   const startStream = async () => {
     // 先取消舊的串流（如果存在）
@@ -106,73 +111,29 @@ export function AgentLogStream({ projectId, runId, autoStart = true, onTasksUpda
     }
   }
 
-  const stopStream = () => {
-    cancelStreamRef.current?.()
-    setIsStreaming(false)
-  }
-
   return (
-    <Card className="p-4">
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex items-center gap-3">
-          <h3 className="font-semibold">即時執行日誌</h3>
-          <div className="flex items-center gap-2">
-            {isStreaming ? (
-              <>
-                <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="text-sm text-green-600">串流中</span>
-              </>
-            ) : (
-              <>
-                <span className="inline-block w-2 h-2 bg-gray-400 rounded-full" />
-                <span className="text-sm text-gray-600">未連線</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            onClick={() => setAutoScroll(!autoScroll)}
-            variant={autoScroll ? "default" : "outline"}
-            size="sm"
-            title={autoScroll ? "關閉自動滾動" : "啟用自動滾動"}
-          >
-            {autoScroll ? "📍 自動滾動" : "🔒 固定視窗"}
-          </Button>
-          {isStreaming ? (
-            <Button onClick={stopStream} variant="destructive" size="sm">
-              停止串流
-            </Button>
-          ) : (
-            <Button onClick={startStream} variant="default" size="sm">
-              開始串流
-            </Button>
-          )}
-        </div>
-      </div>
-
+    <div className="h-full flex flex-col bg-gray-900">
       {error && (
-        <div className="bg-red-50 text-red-600 p-3 rounded mb-3 text-sm">
+        <div className="bg-red-900/30 text-red-400 px-3 py-2 text-xs border-b border-red-900/50 flex-shrink-0">
           ⚠️ {error}
         </div>
       )}
 
       <div
         ref={logsContainerRef}
-        className="bg-gray-900 text-gray-100 p-4 rounded font-mono text-sm h-96 overflow-y-auto scroll-smooth"
+        className="flex-1 text-gray-100 p-2 font-mono text-xs overflow-y-auto scroll-smooth"
         style={{ scrollBehavior: 'smooth' }}
       >
         {logs.length === 0 ? (
           <div className="text-gray-500 text-center py-8">
-            {isStreaming ? '等待日誌...' : '點擊「開始串流」查看日誌'}
+            {isStreaming ? '等待日誌...' : '尚無日誌'}
           </div>
         ) : (
           logs.map((log, idx) => <LogLine key={idx} event={log} />)
         )}
         <div ref={logsEndRef} />
       </div>
-    </Card>
+    </div>
   )
 }
 

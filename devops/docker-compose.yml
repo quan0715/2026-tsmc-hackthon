@@ -1,4 +1,24 @@
 services:
+  # PostgreSQL for LangGraph persistence
+  postgres:
+    image: postgres:16
+    container_name: refactor-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: langgraph
+      POSTGRES_PASSWORD: langgraph_secret
+      POSTGRES_DB: langgraph
+    networks:
+      - refactor-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langgraph"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # MongoDB 資料庫
   mongodb:
     image: mongo:7
@@ -34,9 +54,12 @@ services:
     environment:
       - MONGODB_URL=mongodb://mongodb:27017
       - MONGODB_DATABASE=refactor_agent
+      - POSTGRES_URL=postgresql://langgraph:langgraph_secret@postgres:5432/langgraph
       - DEBUG=true
     depends_on:
       mongodb:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
     networks:
       - refactor-network
@@ -62,6 +85,7 @@ services:
 
 volumes:
   mongodb_data:
+  postgres_data:
 
 networks:
   refactor-network:

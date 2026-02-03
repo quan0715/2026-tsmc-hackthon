@@ -66,3 +66,37 @@ async def get_current_user(
         )
 
     return user
+
+
+async def verify_project_access(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncDatabase = Depends(get_database),
+):
+    """
+    驗證專案存在且用戶有權限訪問
+    
+    Returns:
+        Project: 專案物件
+        
+    Raises:
+        HTTPException: 404 if project not found, 403 if no permission
+    """
+    from ..services.project_service import ProjectService
+    
+    service = ProjectService(db)
+    project = await service.get_project_by_id(project_id)
+    
+    if not project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="專案不存在"
+        )
+    
+    if project.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="無權限訪問此專案"
+        )
+    
+    return project

@@ -1,6 +1,6 @@
 FROM python:3.11-alpine
 
-RUN apk add --no-cache git build-base libffi-dev openssl-dev
+RUN apk add --no-cache git build-base libffi-dev openssl-dev bash
 
 # 設定環境變數：確保 Python 輸出不被緩衝
 ENV PYTHONUNBUFFERED=1
@@ -16,12 +16,14 @@ COPY agent/requirements.txt /tmp/
 RUN pip install --no-cache-dir -r /tmp/requirements.txt && \
     rm /tmp/requirements.txt
 
-# 複製 Agent 程式碼到 /workspace/agent/
-COPY agent/*.py /workspace/agent/
-COPY agent/.env* /workspace/agent/
+# 複製 Agent 程式碼到 /workspace/agent/（包含子目錄）
+COPY agent/ /workspace/agent/
 
 # 複製 memory 資料夾（包含 AGENTS.md）
 COPY agent/workspace/memory/ /workspace/memory/
+
+# 複製 skills 資料夾
+COPY agent/workspace/skills/ /workspace/skills/
 
 # 確保 .env 存在
 RUN if [ ! -f /workspace/agent/.env ] && [ -f /workspace/agent/.env.example ]; then \

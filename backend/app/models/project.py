@@ -5,6 +5,13 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+class ProjectType(str, Enum):
+    """專案類型"""
+
+    REFACTOR = "REFACTOR"  # 重構專案（原有功能，需要 repo_url）
+    SANDBOX = "SANDBOX"    # 沙盒測試（純聊天，不需要 repo_url）
+
+
 class ProjectStatus(str, Enum):
     """專案狀態"""
 
@@ -21,7 +28,10 @@ class Project(BaseModel):
     """專案模型"""
 
     id: str = Field(default=None, alias="_id")  # MongoDB _id
-    repo_url: str  # Git repository URL
+    title: Optional[str] = None  # 專案標題（選填，未填則使用 repo 名稱）
+    description: Optional[str] = None  # 專案描述（選填）
+    project_type: ProjectType = ProjectType.REFACTOR  # 專案類型
+    repo_url: Optional[str] = None  # Git repository URL（SANDBOX 類型可為空）
     branch: str = "main"  # Git branch
     init_prompt: str  # 初始提示
     status: ProjectStatus = ProjectStatus.CREATED  # 專案狀態

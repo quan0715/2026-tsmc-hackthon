@@ -7,6 +7,7 @@ import RegisterPage from '@/pages/RegisterPage'
 import ProjectsPage from '@/pages/ProjectsPage'
 import CreateProjectPage from '@/pages/CreateProjectPage'
 import ProjectDetailPage from '@/pages/ProjectDetailPage'
+import ChatPage from '@/pages/ChatPage'
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/new" element={<CreateProjectPage />} />
             <Route path="/projects/:id" element={<ProjectDetailPage />} />
+            <Route path="/projects/:id/chat" element={<ChatPage />} />
           </Route>
 
           {/* 根路徑導向專案列表 */}

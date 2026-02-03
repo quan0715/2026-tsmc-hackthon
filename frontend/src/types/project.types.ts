@@ -1,3 +1,8 @@
+export enum ProjectType {
+  REFACTOR = 'REFACTOR',
+  SANDBOX = 'SANDBOX',
+}
+
 export enum ProjectStatus {
   CREATED = 'CREATED',
   PROVISIONING = 'PROVISIONING',
@@ -10,7 +15,10 @@ export enum ProjectStatus {
 
 export interface Project {
   id: string
-  repo_url: string
+  title?: string
+  description?: string
+  project_type: ProjectType
+  repo_url?: string
   branch: string
   init_prompt: string
   status: ProjectStatus
@@ -31,12 +39,17 @@ export interface DockerStatus {
 }
 
 export interface CreateProjectRequest {
-  repo_url: string
+  title?: string
+  description?: string
+  project_type: ProjectType
+  repo_url?: string
   branch: string
   init_prompt: string
 }
 
 export interface UpdateProjectRequest {
+  title?: string
+  description?: string
   repo_url?: string
   branch?: string
   init_prompt?: string

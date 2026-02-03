@@ -54,18 +54,23 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-gray-900">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle className="text-2xl font-bold text-center">
+          <div className="flex justify-center mb-4">
+            <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center text-white text-xl font-bold">
+              smo
+            </div>
+          </div>
+          <CardTitle className="text-2xl font-bold text-center text-gray-100">
             AI 舊程式碼智能重構系統
           </CardTitle>
-          <p className="text-center text-sm text-gray-600">登入以繼續</p>
+          <p className="text-center text-sm text-gray-400">登入以繼續</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium mb-2">使用者名稱</label>
+              <label className="block text-sm font-medium mb-2 text-gray-200">使用者名稱</label>
               <Input
                 type="text"
                 placeholder="username"
@@ -75,7 +80,7 @@ export default function LoginPage() {
               />
             </div>
             <div>
-              <label className="block text-sm font-medium mb-2">密碼</label>
+              <label className="block text-sm font-medium mb-2 text-gray-200">密碼</label>
               <Input
                 type="password"
                 placeholder="••••••••"
@@ -85,7 +90,7 @@ export default function LoginPage() {
               />
             </div>
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="bg-red-900/30 border border-red-700/50 text-red-400 p-4 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
                 <span className="text-xl flex-shrink-0">⚠️</span>
                 <div className="flex-1">
                   <div className="font-semibold mb-1">登入失敗</div>
@@ -97,14 +102,14 @@ export default function LoginPage() {
               {loading ? '登入中...' : '登入'}
             </Button>
 
-            <div className="text-center text-sm">
+            <div className="text-center text-sm text-gray-400">
               沒有帳號？{' '}
-              <Link to="/register" className="text-blue-600 hover:underline">
+              <Link to="/register" className="text-purple-400 hover:underline">
                 註冊
               </Link>
             </div>
 
-            <div className="text-center text-sm text-gray-600 mt-4">
+            <div className="text-center text-sm text-gray-500 mt-4">
               測試帳號: quan / quan12345
             </div>
           </form>

@@ -41,22 +41,22 @@ function TaskItem({ task }: { task: Task; index: number }) {
   const getStatusIcon = () => {
     switch (task.status) {
       case 'completed':
-        return <CheckCircle2 className="w-5 h-5 text-green-600" />
+        return <CheckCircle2 className="w-5 h-5 text-green-400" />
       case 'in_progress':
-        return <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+        return <Loader2 className="w-5 h-5 text-purple-400 animate-spin" />
       case 'pending':
-        return <Circle className="w-5 h-5 text-gray-400" />
+        return <Circle className="w-5 h-5 text-gray-500" />
     }
   }
 
   const getStatusColor = () => {
     switch (task.status) {
       case 'completed':
-        return 'bg-green-50 border-green-200'
+        return 'bg-green-900/20 border-green-700/50'
       case 'in_progress':
-        return 'bg-blue-50 border-blue-200'
+        return 'bg-purple-900/20 border-purple-700/50'
       case 'pending':
-        return 'bg-gray-50 border-gray-200'
+        return 'bg-gray-800/50 border-gray-700/50'
     }
   }
 
@@ -78,7 +78,7 @@ function TaskItem({ task }: { task: Task; index: number }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className={`text-sm ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+          <p className={`text-sm ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-200'}`}>
             {task.content}
           </p>
           <Badge

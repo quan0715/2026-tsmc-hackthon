@@ -34,7 +34,6 @@ class ContainerService:
         self,
         project_id: str,
         image: str = None,
-        dev_mode: Optional[bool] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """建立容器
@@ -42,13 +41,9 @@ class ContainerService:
         Args:
             project_id: 專案 ID
             image: Docker 映像名稱
-            dev_mode: 開發模式覆蓋 (None=使用全域設定)
         """
         if image is None:
             image = settings.docker_base_image
-
-        # 決定是否啟用開發模式
-        use_dev_mode = dev_mode if dev_mode is not None else settings.dev_mode
 
         try:
             # 準備專案工作區目錄
@@ -62,24 +57,18 @@ class ContainerService:
                 "-v", f"{project_dir}/artifacts:/workspace/artifacts"
             ]
 
-            # 開發模式：掛載 agent 程式碼
-            if use_dev_mode:
-                if not settings.agent_host_path:
-                    raise ValueError("DEV_MODE 啟用但 AGENT_HOST_PATH 未設定")
-
-                volume_args.extend([
-                    "-v", f"{settings.agent_host_path}:/workspace/agent:ro"  # 唯讀掛載
-                ])
-                logger.info(f"🔧 開發模式：掛載 agent 從 {settings.agent_host_path}")
-            else:
-                logger.info("📦 生產模式：使用 image 內建的 agent")
-
             # 準備環境變數
             env_vars = []
 
             # 傳遞 ANTHROPIC_API_KEY（如果有設定）
             if hasattr(settings, 'anthropic_api_key') and settings.anthropic_api_key:
                 env_vars.extend(["-e", f"ANTHROPIC_API_KEY={settings.anthropic_api_key}"])
+
+            # 傳遞 POSTGRES_URL（用於 LangGraph 持久化）
+            postgres_url = os.environ.get("POSTGRES_URL")
+            if postgres_url:
+                env_vars.extend(["-e", f"POSTGRES_URL={postgres_url}"])
+                logger.info(f"容器將使用 PostgreSQL 持久化")
 
             # 建立容器
             cmd = [
@@ -103,16 +92,13 @@ class ContainerService:
             )
 
             container_id = result.stdout.strip()
-            logger.info(
-                f"建立容器: {container_id} "
-                f"(dev_mode={use_dev_mode})"
-            )
+            logger.info(f"建立容器: {container_id}")
             return {"id": container_id}
         except subprocess.CalledProcessError as e:
             logger.error(f"建立容器失敗: {e.stderr}")
             raise Exception(f"建立容器失敗: {e.stderr}")
 
-    def start_container(self, container_id: str) -> None:
+    def start_container(self, container_id: str, wait_ready: bool = True) -> None:
         """啟動容器"""
         try:
             subprocess.run(
@@ -122,9 +108,40 @@ class ContainerService:
                 check=True
             )
             logger.info(f"啟動容器: {container_id}")
+            
+            # 等待容器就緒
+            if wait_ready:
+                self._wait_container_ready(container_id)
+                
         except subprocess.CalledProcessError as e:
             logger.error(f"啟動容器失敗: {e.stderr}")
             raise Exception(f"啟動容器失敗: {e.stderr}")
+    
+    def _wait_container_ready(self, container_id: str, timeout: int = 30) -> None:
+        """等待容器就緒（可執行指令）"""
+        import time
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            try:
+                # 嘗試執行簡單指令確認容器就緒
+                result = subprocess.run(
+                    ["docker", "exec", container_id, "echo", "ready"],
+                    capture_output=True,
+                    text=True,
+                    timeout=5
+                )
+                if result.returncode == 0 and "ready" in result.stdout:
+                    logger.info(f"容器已就緒: {container_id}")
+                    return
+            except subprocess.TimeoutExpired:
+                pass
+            except subprocess.CalledProcessError:
+                pass
+            
+            time.sleep(1)
+        
+        logger.warning(f"容器就緒超時，繼續嘗試: {container_id}")
 
     def stop_container(self, container_id: str, timeout: int = 10) -> None:
         """停止容器"""
@@ -218,6 +235,7 @@ class ContainerService:
         repo_url: str,
         branch: str = "main",
         target_dir: str = "/workspace/repo",
+        timeout: int = 120,
     ) -> Dict[str, Any]:
         """在容器中 clone repository"""
         try:
@@ -227,21 +245,35 @@ class ContainerService:
             subprocess.run(
                 ["docker", "exec", "-w", "/workspace", container_id, "sh", "-c", cleanup_cmd],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=30
             )
 
             # 執行 git clone 指令
-            clone_cmd = f"git clone --branch {branch} --depth {settings.git_depth} {repo_url} {target_dir}"
+            clone_cmd = f"git clone --branch {branch} --depth {settings.git_depth} {repo_url} {target_dir} 2>&1"
+            logger.info(f"執行 clone 指令: git clone --branch {branch} --depth {settings.git_depth} {repo_url}")
 
             result = subprocess.run(
                 ["docker", "exec", "-w", "/workspace", container_id, "sh", "-c", clone_cmd],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=timeout
             )
 
+            # 合併 stdout 和 stderr（因為我們用 2>&1 重導向了）
+            output = result.stdout + result.stderr
+            
             if result.returncode != 0:
-                error_msg = result.stderr or result.stdout
-                logger.error(f"Clone repository 失敗: {error_msg}")
+                # 過濾掉正常的 git 輸出，提取真正的錯誤訊息
+                error_lines = []
+                for line in output.split('\n'):
+                    line = line.strip()
+                    # 跳過正常的狀態訊息
+                    if line and not line.startswith('Cloning into'):
+                        error_lines.append(line)
+                
+                error_msg = '\n'.join(error_lines) if error_lines else output
+                logger.error(f"Clone repository 失敗 (exit code: {result.returncode}): {error_msg}")
                 raise Exception(f"Clone repository 失敗: {error_msg}")
 
             logger.info(f"成功 clone repository: {repo_url}")
@@ -250,6 +282,10 @@ class ContainerService:
                 "stdout": result.stdout,
                 "stderr": result.stderr,
             }
+        except subprocess.TimeoutExpired:
+            error_msg = f"Clone repository 超時 ({timeout}秒)"
+            logger.error(error_msg)
+            raise Exception(error_msg)
         except Exception as e:
             logger.error(f"Clone repository 失敗: {e}")
             raise

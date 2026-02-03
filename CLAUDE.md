@@ -41,14 +41,6 @@ AI 舊程式碼智能重構系統 - 一個前後端分離的大型專案，提�
 - **AgentRun** - Agent 執行記錄 (project_id, iteration_index, phase, status, artifacts_path)
 - **User** - 使用者帳號 (email, hashed_password, JWT 認證)
 
-### Agent 執行流程
-
-1. **PLAN Phase** - Deep Agent 分析程式碼庫，生成重構計劃 (plan.json + plan.md)
-2. **TEST Phase** - (Phase 3 實作) 驗證重構計劃可行性
-3. **EXEC Phase** - (Phase 3 實作) 執行實際重構操作
-
-執行方式：背景任務 (FastAPI BackgroundTasks)，立即返回 run_id，非同步執行。
-
 ## 常用指令
 
 ### 開發環境設置
@@ -91,32 +83,8 @@ docker-compose -f devops/docker-compose.yml down
 docker-compose -f devops/docker-compose.yml down -v
 ```
 
-### 開發模式 (Development Mode)
-
-在開發 Agent 程式碼時，啟用開發模式避免每次修改都重建 image：
-
-```bash
-# 1. 編輯 backend/.env
-DEV_MODE=true
-AGENT_HOST_PATH=/Users/quan/auto-refactor-agent/agent  # 使用絕對路徑
-
-# 2. 重啟 Backend
-cd backend
-uvicorn app.main:app --reload
-
-# 3. Provision 專案（agent 程式碼會動態掛載）
-curl -X POST "http://localhost:8000/api/v1/projects/{id}/provision"
-
-# 4. 修改 agent/*.py 檔案後，容器內立即生效
-```
-
-**注意事項**：
-- `AGENT_HOST_PATH` 必須是絕對路徑且目錄必須存在
-- 目錄內必須包含 `ai_server.py` 檔案
-- Agent 程式碼以唯讀模式掛載到容器
-- 生產環境請保持 `DEV_MODE=false`
-
 **API 層級控制**：
+
 ```bash
 # 單獨為某個專案啟用開發模式
 POST /api/v1/projects/{id}/provision?dev_mode=true
@@ -242,10 +210,12 @@ python scripts/init_agent_run_indexes.py
 ## API 端點概覽
 
 ### 認證
+
 - `POST /api/v1/auth/register` - 註冊新使用者
 - `POST /api/v1/auth/login` - 登入取得 JWT token
 
 ### 專案管理
+
 - `POST /api/v1/projects` - 建立專案
 - `GET /api/v1/projects` - 列出所有專案
 - `GET /api/v1/projects/{id}` - 查詢專案 (支援 `include_docker_status=true`)
@@ -256,6 +226,7 @@ python scripts/init_agent_run_indexes.py
 - `DELETE /api/v1/projects/{id}` - 刪除專案和容器
 
 ### Agent 管理
+
 - `POST /api/v1/projects/{id}/agent/run` - 啟動 Agent (背景執行)
 - `GET /api/v1/projects/{id}/agent/runs` - 列出所有 Agent Runs
 - `GET /api/v1/projects/{id}/agent/runs/{run_id}` - 查詢 Agent Run 狀態
@@ -265,11 +236,13 @@ python scripts/init_agent_run_indexes.py
 ## 資料庫設計要點
 
 ### Collections
+
 - `projects` - 專案資訊
 - `agent_runs` - Agent 執行記錄
 - `users` - 使用者帳號
 
 ### 索引 (建議設置)
+
 - `projects.owner_id` - 加速使用者專案查詢
 - `agent_runs.project_id` - 加速專案相關 runs 查詢
 - `agent_runs.created_at` (desc) - 加速時間排序
@@ -277,6 +250,7 @@ python scripts/init_agent_run_indexes.py
 ## 開發注意事項
 
 ### 新增 API 端點流程
+
 1. 在 `backend/app/schemas/` 定義請求/回應 Schema (Pydantic)
 2. 在 `backend/app/models/` 定義資料模型 (如需持久化)
 3. 在 `backend/app/services/` 實作業務邏輯
@@ -285,16 +259,19 @@ python scripts/init_agent_run_indexes.py
 6. 在 `backend/tests/` 撰寫測試
 
 ### 前端 API 整合
+
 - API Base URL 透過環境變數 `VITE_API_BASE_URL` 設定
 - 使用 axios 作為 HTTP client
 - JWT token 應存在 localStorage 或 sessionStorage
 - 所有需認證的請求需帶上 `Authorization: Bearer <token>` header
 
 ### Docker 權限要求
+
 - Backend API 容器需掛載 `/var/run/docker.sock` 以管理其他容器
 - 開發環境可能需要將使用者加入 `docker` group
 
 ### 環境變數重要欄位
+
 - `ANTHROPIC_API_KEY` - 必填，用於 Deep Agent LLM 呼叫
 - `JWT_SECRET_KEY` - 生產環境務必更換
 - `MONGODB_URL` - 開發環境為 `mongodb://mongodb:27017`，本地測試為 `mongodb://localhost:27017`
@@ -302,6 +279,7 @@ python scripts/init_agent_run_indexes.py
 - ~~`AGENT_RUNTIME_HOST_PATH`~~ - **已棄用**，Agent 已內建於 base image
 
 ### 測試策略
+
 - 使用 pytest + pytest-asyncio 測試非同步程式碼
 - 使用 httpx.AsyncClient 測試 API 端點
 - 使用 `conftest.py` 定義共用 fixtures (test_db, test_client)

@@ -11,7 +11,30 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Dark mode 基本樣式 */
+.dark body {
+  @apply bg-gray-900 text-gray-100;
+}
+
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
+}
+
+/* 自定義滾動條樣式 (dark mode) */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  @apply bg-gray-800;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  @apply bg-gray-600 rounded;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-500;
 }

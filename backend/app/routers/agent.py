@@ -8,12 +8,25 @@ import logging
 
 from ..database.mongodb import get_database
 from ..services.project_service import ProjectService
-from ..models.user import User
 from ..models.project import ProjectStatus
-from ..dependencies.auth import get_current_user
+from ..dependencies.auth import get_current_user, verify_project_access
 
 router = APIRouter(prefix="/api/v1/projects", tags=["agent"])
 logger = logging.getLogger(__name__)
+
+# Agent 狀態映射：從 AI Server 狀態轉換為前端期望格式
+AGENT_STATUS_MAPPING = {
+    "pending": "RUNNING",
+    "running": "RUNNING",
+    "success": "DONE",
+    "failed": "FAILED",
+    "stopped": "STOPPED"
+}
+
+
+def get_container_name(project_id: str) -> str:
+    """獲取容器名稱"""
+    return f"refactor-project-{project_id}"
 
 
 async def get_project_service(
@@ -27,7 +40,7 @@ async def get_project_service(
 async def run_agent(
     project_id: str,
     project_service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """啟動 AI Agent 執行（異步模式）
 
@@ -36,18 +49,13 @@ async def run_agent(
     2. 呼叫容器內的 AI Server /run endpoint
     3. 立即返回 run_id，Agent 在背景執行
     """
-    # 驗證專案存在和權限
-    project = await project_service.get_project_by_id(project_id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="專案不存在或無權限")
-
     if project.status != ProjectStatus.READY:
         raise HTTPException(
             status_code=400,
             detail=f"專案狀態必須為 READY，目前為 {project.status}"
         )
 
-    container_name = f"refactor-project-{project_id}"
+    container_name = get_container_name(project_id)
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -84,15 +92,10 @@ async def run_agent(
 async def list_agent_runs(
     project_id: str,
     project_service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """列出專案的所有 Agent Runs"""
-    # 驗證專案權限
-    project = await project_service.get_project_by_id(project_id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="專案不存在或無權限")
-
-    container_name = f"refactor-project-{project_id}"
+    container_name = get_container_name(project_id)
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -102,15 +105,6 @@ async def list_agent_runs(
             response.raise_for_status()
             tasks_data = response.json()
 
-        # 轉換格式
-        status_mapping = {
-            "pending": "RUNNING",
-            "running": "RUNNING",
-            "success": "DONE",
-            "failed": "FAILED",
-            "stopped": "STOPPED"
-        }
-
         runs = []
         for task in tasks_data.get("tasks", []):
             runs.append({
@@ -118,7 +112,7 @@ async def list_agent_runs(
                 "project_id": project_id,
                 "iteration_index": 0,
                 "phase": "plan",
-                "status": status_mapping.get(task["status"], "RUNNING"),
+                "status": AGENT_STATUS_MAPPING.get(task["status"], "RUNNING"),
                 "created_at": task.get("created_at", ""),
                 "updated_at": task.get("started_at", task.get("created_at", "")),
                 "finished_at": task.get("finished_at"),
@@ -141,15 +135,10 @@ async def get_agent_run_detail(
     project_id: str,
     run_id: str,
     project_service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """查詢 Agent Run 詳細狀態"""
-    # 驗證專案權限
-    project = await project_service.get_project_by_id(project_id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="專案不存在或無權限")
-
-    container_name = f"refactor-project-{project_id}"
+    container_name = get_container_name(project_id)
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -159,21 +148,12 @@ async def get_agent_run_detail(
             response.raise_for_status()
             task_data = response.json()
 
-        # 轉換 AI Server 格式到前端期望格式
-        status_mapping = {
-            "pending": "RUNNING",
-            "running": "RUNNING",
-            "success": "DONE",
-            "failed": "FAILED",
-            "stopped": "STOPPED"
-        }
-
         return {
             "id": run_id,
             "project_id": project_id,
             "iteration_index": 0,
             "phase": "plan",
-            "status": status_mapping.get(task_data["status"], "RUNNING"),
+            "status": AGENT_STATUS_MAPPING.get(task_data["status"], "RUNNING"),
             "created_at": task_data.get("created_at", ""),
             "updated_at": task_data.get("started_at", task_data.get("created_at", "")),
             "finished_at": task_data.get("finished_at"),
@@ -190,15 +170,10 @@ async def stream_agent_logs(
     project_id: str,
     run_id: str,
     project_service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """SSE 串流 Agent 執行日誌（轉發容器的 stream）"""
-    # 驗證專案權限
-    project = await project_service.get_project_by_id(project_id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="專案不存在或無權限")
-
-    container_name = f"refactor-project-{project_id}"
+    container_name = get_container_name(project_id)
 
     async def event_generator():
         """直接轉發容器的 SSE stream（原始轉發，不做任何處理）"""
@@ -242,15 +217,10 @@ async def stop_agent_run(
     project_id: str,
     run_id: str,
     project_service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """停止執行中的 Agent Run"""
-    # 驗證專案權限
-    project = await project_service.get_project_by_id(project_id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="專案不存在或無權限")
-
-    container_name = f"refactor-project-{project_id}"
+    container_name = get_container_name(project_id)
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
@@ -273,18 +243,13 @@ async def resume_agent_run(
     project_id: str,
     run_id: str,
     project_service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """繼續執行已停止的 Agent Run
 
     會使用原始 init_prompt 重新啟動一個新的任務。
     """
-    # 驗證專案權限
-    project = await project_service.get_project_by_id(project_id)
-    if not project or project.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="專案不存在或無權限")
-
-    container_name = f"refactor-project-{project_id}"
+    container_name = get_container_name(project_id)
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:

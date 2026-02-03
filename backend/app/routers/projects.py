@@ -1,14 +1,14 @@
 """專案路由"""
 import logging
 from typing import Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ..database.mongodb import get_database
 from ..services.project_service import ProjectService
-from ..models.user import User
 from ..models.project import ProjectStatus
-from ..dependencies.auth import get_current_user
+from ..models.user import User
+from ..dependencies.auth import get_current_user, verify_project_access
 from ..schemas.project import (
     CreateProjectRequest,
     UpdateProjectRequest,
@@ -52,22 +52,9 @@ async def get_project(
     project_id: str,
     include_docker_status: bool = True,
     service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """查詢專案（包含 Docker 狀態和一致性檢查，需要認證）"""
-    # 先查詢專案以驗證所有權
-    project = await service.get_project_by_id(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
-        )
-
-    # 驗證所有權
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="無權限訪問此專案"
-        )
-
     if include_docker_status:
         project_data = await service.get_project_with_docker_status(project_id)
         return ProjectResponse(**project_data)
@@ -80,22 +67,9 @@ async def update_project(
     project_id: str,
     request: UpdateProjectRequest,
     service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """更新專案（需要認證，Provision 後不能修改 repo_url）"""
-    # 先查詢專案以驗證所有權
-    project = await service.get_project_by_id(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
-        )
-
-    # 驗證所有權
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此專案"
-        )
-
     # 如果專案已經 provision（狀態不是 CREATED），則不允許修改 repo_url
     if project.status != ProjectStatus.CREATED and request.repo_url is not None:
         raise HTTPException(
@@ -135,34 +109,12 @@ async def list_projects(
 @router.post("/{project_id}/provision", response_model=ProvisionResponse)
 async def provision_project(
     project_id: str,
-    dev_mode: Optional[bool] = Query(
-        default=None,
-        description="開發模式覆蓋 (true=啟用, false=停用, null=使用全域設定)"
-    ),
     service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
-    """Provision 專案 - 建立容器並 clone repository（需要認證）
-
-    Query Parameters:
-        dev_mode: 覆蓋全域 DEV_MODE 設定
-          - true: 強制啟用開發模式（掛載本機 agent）
-          - false: 強制停用開發模式（使用 image 內建 agent）
-          - null (預設): 使用 .env 中的 DEV_MODE 設定
-    """
-    # 驗證所有權
-    project = await service.get_project_by_id(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
-        )
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此專案"
-        )
-
+    """Provision 專案 - 建立容器並 clone repository（需要認證）"""
     try:
-        project = await service.provision_project(project_id, dev_mode=dev_mode)
+        project = await service.provision_project(project_id)
         if not project:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
@@ -190,20 +142,9 @@ async def exec_command(
     project_id: str,
     request: ExecCommandRequest,
     service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """在專案容器中執行指令（需要認證）"""
-    # 查詢專案並驗證所有權
-    project = await service.get_project_by_id(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
-        )
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此專案"
-        )
-
     # 檢查容器是否存在
     if not project.container_id:
         raise HTTPException(
@@ -231,20 +172,9 @@ async def stream_logs(
     follow: bool = True,
     tail: int = 100,
     service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """串流容器日誌 (SSE)（需要認證）"""
-    # 查詢專案並驗證所有權
-    project = await service.get_project_by_id(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
-        )
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="無權限訪問此專案"
-        )
-
     # 檢查容器是否存在
     if not project.container_id:
         raise HTTPException(
@@ -265,20 +195,9 @@ async def stream_logs(
 async def stop_project(
     project_id: str,
     service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """停止專案容器（需要認證）"""
-    # 驗證所有權
-    project = await service.get_project_by_id(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
-        )
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此專案"
-        )
-
     try:
         project = await service.stop_project(project_id)
         if not project:
@@ -300,22 +219,10 @@ async def stop_project(
 @router.post("/{project_id}/reprovision", response_model=ProjectResponse)
 async def reprovision_project(
     project_id: str,
-    background_tasks: BackgroundTasks,
     service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """重設專案（刪除容器並重新 provision）"""
-    # 驗證所有權
-    project = await service.get_project_by_id(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
-        )
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此專案"
-        )
-
     try:
         # 先停止並刪除現有容器（如果存在）
         if project.container_id:
@@ -348,20 +255,9 @@ async def reprovision_project(
 async def delete_project(
     project_id: str,
     service: ProjectService = Depends(get_project_service),
-    current_user: User = Depends(get_current_user),
+    project = Depends(verify_project_access),
 ):
     """刪除專案和容器（需要認證）"""
-    # 驗證所有權
-    project = await service.get_project_by_id(project_id)
-    if not project:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
-        )
-    if project.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="無權限操作此專案"
-        )
-
     success = await service.delete_project(project_id)
     if not success:
         raise HTTPException(

@@ -38,20 +38,25 @@ export default function ProjectsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen">
-        <div className="text-lg">載入中...</div>
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-lg text-gray-300">載入中...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-900 text-gray-100">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-gray-900 border-b border-gray-800">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold">AI 舊程式碼智能重構系統</h1>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-orange-500 rounded flex items-center justify-center text-white text-sm font-bold">
+              smo
+            </div>
+            <h1 className="text-xl font-bold">AI 舊程式碼智能重構系統</h1>
+          </div>
           <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600">
+            <span className="text-sm text-gray-400">
               {user?.username} ({user?.email})
             </span>
             <Button variant="outline" size="sm" onClick={logout}>
@@ -73,7 +78,7 @@ export default function ProjectsPage() {
         {projects.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
-              <p className="text-gray-600 mb-4">尚無專案</p>
+              <p className="text-gray-400 mb-4">尚無專案</p>
               <Link to="/projects/new">
                 <Button>建立第一個專案</Button>
               </Link>
@@ -83,14 +88,16 @@ export default function ProjectsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {projects.map((project) => (
               <Link key={project.id} to={`/projects/${project.id}`}>
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
+                <Card className="hover:border-purple-500/50 transition-all cursor-pointer h-full">
                   <CardHeader>
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex-1 min-w-0">
-                        <h3 className="font-semibold truncate" title={project.repo_url}>
-                          {project.repo_url.split('/').pop()?.replace('.git', '') || project.repo_url}
+                        <h3 className="font-semibold truncate text-gray-100" title={project.title || project.repo_url}>
+                          {project.title || project.repo_url?.split('/').pop()?.replace('.git', '') || '未命名專案'}
                         </h3>
-                        <p className="text-xs text-gray-500 truncate">{project.repo_url}</p>
+                        {project.repo_url && (
+                          <p className="text-xs text-gray-500 truncate">{project.repo_url}</p>
+                        )}
                       </div>
                       <Badge variant={statusColors[project.status]}>
                         {project.status}
@@ -98,15 +105,15 @@ export default function ProjectsPage() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <p className="text-sm text-gray-600 line-clamp-2 mb-2">
-                      {project.init_prompt}
+                    <p className="text-sm text-gray-400 line-clamp-2 mb-2">
+                      {project.description || project.init_prompt}
                     </p>
                     <div className="text-xs text-gray-500">
                       <div>分支: {project.branch}</div>
                       <div>建立於: {new Date(project.created_at).toLocaleString('zh-TW')}</div>
                     </div>
                     {project.last_error && (
-                      <div className="mt-2 text-xs text-red-500 bg-red-50 p-2 rounded">
+                      <div className="mt-2 text-xs text-red-400 bg-red-900/30 p-2 rounded border border-red-700/50">
                         錯誤: {project.last_error}
                       </div>
                     )}

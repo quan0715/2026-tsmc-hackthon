@@ -73,15 +73,20 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
+    <div className="min-h-screen flex items-center justify-center bg-gray-900">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>註冊新帳號</CardTitle>
+          <div className="flex justify-center mb-4">
+            <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center text-white text-xl font-bold">
+              smo
+            </div>
+          </div>
+          <CardTitle className="text-center text-gray-100">註冊新帳號</CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="bg-red-900/30 border border-red-700/50 text-red-400 p-4 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
                 <span className="text-xl flex-shrink-0">⚠️</span>
                 <div className="flex-1">
                   <div className="font-semibold mb-1">註冊失敗</div>
@@ -91,7 +96,7 @@ export default function RegisterPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
+              <label className="block text-sm font-medium mb-1 text-gray-200">Email</label>
               <Input
                 type="email"
                 value={email}
@@ -99,11 +104,11 @@ export default function RegisterPage() {
                 required
                 placeholder="your@email.com"
               />
-              <p className="text-xs text-gray-500 mt-1">必須是有效的 Email 格式</p>
+              <p className="text-xs text-gray-400 mt-1">必須是有效的 Email 格式</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">使用者名稱</label>
+              <label className="block text-sm font-medium mb-1 text-gray-200">使用者名稱</label>
               <Input
                 type="text"
                 value={username}
@@ -112,11 +117,11 @@ export default function RegisterPage() {
                 minLength={3}
                 placeholder="username"
               />
-              <p className="text-xs text-gray-500 mt-1">至少 3 個字元，最多 50 個字元</p>
+              <p className="text-xs text-gray-400 mt-1">至少 3 個字元，最多 50 個字元</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1">密碼</label>
+              <label className="block text-sm font-medium mb-1 text-gray-200">密碼</label>
               <Input
                 type="password"
                 value={password}
@@ -125,16 +130,16 @@ export default function RegisterPage() {
                 minLength={8}
                 placeholder="至少 8 個字元"
               />
-              <p className="text-xs text-gray-500 mt-1">至少 8 個字元，最多 100 個字元</p>
+              <p className="text-xs text-gray-400 mt-1">至少 8 個字元，最多 100 個字元</p>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? '註冊中...' : '註冊'}
             </Button>
 
-            <div className="text-center text-sm">
+            <div className="text-center text-sm text-gray-400">
               已有帳號？{' '}
-              <Link to="/login" className="text-blue-600 hover:underline">
+              <Link to="/login" className="text-purple-400 hover:underline">
                 登入
               </Link>
             </div>

@@ -4,7 +4,7 @@ from typing import Optional, List
 from bson import ObjectId
 from pymongo.asynchronous.database import AsyncDatabase
 
-from ..models.project import Project, ProjectStatus
+from ..models.project import Project, ProjectStatus, ProjectType
 from ..schemas.project import CreateProjectRequest, UpdateProjectRequest
 from .container_service import ContainerService
 from ..utils.mongodb_helpers import validate_and_convert_object_id, objectid_to_str
@@ -23,6 +23,7 @@ class ProjectService:
     async def create_project(self, request: CreateProjectRequest, owner_id: str, owner_email: str = None) -> Project:
         """建立專案"""
         project = Project(
+            project_type=request.project_type,
             repo_url=request.repo_url,
             branch=request.branch,
             init_prompt=request.init_prompt,
@@ -197,14 +198,12 @@ class ProjectService:
 
     async def provision_project(
         self,
-        project_id: str,
-        dev_mode: Optional[bool] = None
+        project_id: str
     ) -> Optional[Project]:
         """Provision 專案 - 建立容器並 clone repository
 
         Args:
             project_id: 專案 ID
-            dev_mode: 開發模式覆蓋 (None=使用全域設定)
         """
         container_service = ContainerService()
 
@@ -213,14 +212,14 @@ class ProjectService:
         if not project:
             return None
 
-        # 檢查狀態 - 允許 CREATED 和 STOPPED 狀態重新 provision
-        if project.status not in [ProjectStatus.CREATED, ProjectStatus.STOPPED]:
+        # 檢查狀態 - 允許 CREATED、STOPPED、FAILED 狀態重新 provision
+        if project.status not in [ProjectStatus.CREATED, ProjectStatus.STOPPED, ProjectStatus.FAILED]:
             raise ValueError(
-                f"專案狀態必須為 CREATED 或 STOPPED,目前為 {project.status}"
+                f"專案狀態必須為 CREATED、STOPPED 或 FAILED，目前為 {project.status}"
             )
 
-        # 如果是 STOPPED 狀態，先清理舊容器
-        if project.status == ProjectStatus.STOPPED and project.container_id:
+        # 如果是 STOPPED 或 FAILED 狀態，先清理舊容器
+        if project.status in [ProjectStatus.STOPPED, ProjectStatus.FAILED] and project.container_id:
             logger.info(f"清理舊容器: {project.container_id}")
             try:
                 container_service.remove_container(project.container_id, force=True)
@@ -236,39 +235,31 @@ class ProjectService:
             )
 
             # 建立主機目錄結構
-            import os
-            import shutil
-            from ..config import settings
-            project_dir = f"{settings.docker_volume_prefix}/{project_id}"
+            self._prepare_project_directories(project_id)
 
-            # 清理舊的 repo 目錄（如果存在）
-            repo_dir = f"{project_dir}/repo"
-            if os.path.exists(repo_dir):
-                logger.info(f"清理舊的 repo 目錄: {repo_dir}")
-                shutil.rmtree(repo_dir)
-
-            os.makedirs(f"{project_dir}/repo", exist_ok=True)
-            os.makedirs(f"{project_dir}/artifacts", exist_ok=True)
-            logger.info(f"建立專案目錄: {project_dir}")
-
-            # 建立容器（傳遞 dev_mode）
+            # 建立容器
             logger.info(f"建立容器: 專案 {project_id}")
             container = container_service.create_container(
-                project_id,
-                dev_mode=dev_mode
+                project_id
             )
             container_id = container["id"]
 
             # 啟動容器
             container_service.start_container(container_id)
 
-            # Clone repository
-            logger.info(f"Clone repository: {project.repo_url}")
-            container_service.clone_repository(
-                container_id,
-                project.repo_url,
-                project.branch,
-            )
+            # 根據專案類型處理
+            if project.project_type == ProjectType.SANDBOX:
+                # SANDBOX 類型：建立初始工作空間（不需要 clone repo）
+                logger.info(f"設置 SANDBOX 工作空間: 專案 {project_id}")
+                self._setup_sandbox_workspace(project_id)
+            else:
+                # REFACTOR 類型：Clone repository
+                logger.info(f"Clone repository: {project.repo_url}")
+                container_service.clone_repository(
+                    container_id,
+                    project.repo_url,
+                    project.branch,
+                )
 
             # 更新專案狀態為 READY
             await self._update_project_status(
@@ -298,6 +289,60 @@ class ProjectService:
             )
 
             raise
+
+    def _prepare_project_directories(self, project_id: str) -> None:
+        """準備專案目錄結構"""
+        import os
+        import shutil
+        from ..config import settings
+        
+        project_dir = f"{settings.docker_volume_prefix}/{project_id}"
+        
+        # 清理舊的 repo 目錄（如果存在）
+        repo_dir = f"{project_dir}/repo"
+        if os.path.exists(repo_dir):
+            logger.info(f"清理舊的 repo 目錄: {repo_dir}")
+            shutil.rmtree(repo_dir)
+        
+        os.makedirs(f"{project_dir}/repo", exist_ok=True)
+        os.makedirs(f"{project_dir}/artifacts", exist_ok=True)
+        logger.info(f"建立專案目錄: {project_dir}")
+
+    def _setup_sandbox_workspace(self, project_id: str) -> None:
+        """設置 SANDBOX 工作空間（建立初始檔案結構）"""
+        import os
+        from ..config import settings
+        
+        project_dir = f"{settings.docker_volume_prefix}/{project_id}"
+        
+        # 建立 memory 目錄
+        memory_dir = f"{project_dir}/memory"
+        os.makedirs(memory_dir, exist_ok=True)
+        
+        # 建立初始 AGENTS.md
+        agents_md_path = f"{memory_dir}/AGENTS.md"
+        if not os.path.exists(agents_md_path):
+            with open(agents_md_path, "w", encoding="utf-8") as f:
+                f.write("""# Agent Memory
+
+這是你的工作空間。你可以在這裡自由探索和創建檔案。
+
+## 可用工具
+
+- `ls` - 列出目錄內容
+- `read_file` - 讀取檔案
+- `write_file` - 寫入檔案
+- `edit_file` - 編輯檔案
+- `glob` - 搜尋檔案
+- `grep` - 搜尋檔案內容
+
+## 工作目錄
+
+- `/workspace/repo/` - 主要工作目錄
+- `/workspace/memory/` - 記憶和筆記
+- `/workspace/artifacts/` - 產出檔案
+""")
+            logger.info(f"建立初始 AGENTS.md: {agents_md_path}")
 
     async def _update_project_status(
         self,
