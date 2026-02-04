@@ -348,3 +348,172 @@ class ContainerService:
         except Exception as e:
             logger.error(f"執行指令失敗: {e}")
             raise
+
+    def list_files(
+        self,
+        container_id: str,
+        path: str = "/workspace",
+        exclude_patterns: list = None
+    ) -> list:
+        """列出容器中的檔案樹
+        
+        Args:
+            container_id: 容器 ID
+            path: 要列出的根目錄
+            exclude_patterns: 要排除的路徑模式列表
+        
+        Returns:
+            檔案樹結構列表
+        """
+        if exclude_patterns is None:
+            exclude_patterns = ["/workspace/agent"]
+        
+        try:
+            # 使用 find 指令列出所有檔案和目錄
+            # 輸出格式: type|path (d=目錄, f=檔案)
+            exclude_args = " ".join([f"! -path '{p}' ! -path '{p}/*'" for p in exclude_patterns])
+            cmd = f"find {path} -mindepth 1 {exclude_args} -printf '%y|%p\\n' 2>/dev/null | sort"
+            
+            result = subprocess.run(
+                ["docker", "exec", container_id, "sh", "-c", cmd],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                logger.warning(f"列出檔案失敗: {result.stderr}")
+                return []
+            
+            # 解析輸出並建構樹狀結構
+            lines = result.stdout.strip().split('\n') if result.stdout.strip() else []
+            return self._build_file_tree(lines, path)
+            
+        except subprocess.TimeoutExpired:
+            logger.error("列出檔案超時")
+            return []
+        except Exception as e:
+            logger.error(f"列出檔案失敗: {e}")
+            return []
+
+    def _build_file_tree(self, lines: list, root_path: str) -> list:
+        """將扁平的檔案列表轉換為樹狀結構"""
+        # 建立路徑到節點的映射
+        nodes = {}
+        root_children = []
+        
+        for line in lines:
+            if not line or '|' not in line:
+                continue
+            
+            file_type, full_path = line.split('|', 1)
+            
+            # 計算相對路徑
+            rel_path = full_path[len(root_path):].lstrip('/')
+            if not rel_path:
+                continue
+            
+            name = os.path.basename(full_path)
+            node = {
+                "name": name,
+                "path": rel_path,
+                "type": "directory" if file_type == 'd' else "file",
+            }
+            
+            if file_type == 'd':
+                node["children"] = []
+            
+            nodes[rel_path] = node
+            
+            # 找到父節點
+            parent_path = os.path.dirname(rel_path)
+            if parent_path and parent_path in nodes:
+                nodes[parent_path]["children"].append(node)
+            elif not parent_path:
+                root_children.append(node)
+        
+        # 對每個目錄的子節點排序（目錄在前，檔案在後，各自按名稱排序）
+        def sort_children(node):
+            if "children" in node:
+                node["children"].sort(key=lambda x: (0 if x["type"] == "directory" else 1, x["name"].lower()))
+                for child in node["children"]:
+                    sort_children(child)
+        
+        for node in root_children:
+            sort_children(node)
+        
+        root_children.sort(key=lambda x: (0 if x["type"] == "directory" else 1, x["name"].lower()))
+        
+        return root_children
+
+    def read_file(
+        self,
+        container_id: str,
+        file_path: str,
+        max_size: int = 1024 * 1024  # 1MB 限制
+    ) -> Dict[str, Any]:
+        """讀取容器中的檔案內容
+        
+        Args:
+            container_id: 容器 ID
+            file_path: 檔案路徑（相對於 /workspace 或絕對路徑）
+            max_size: 最大讀取大小（bytes）
+        
+        Returns:
+            包含 path, content, size 的字典
+        """
+        # 確保路徑安全
+        if '..' in file_path:
+            raise ValueError("路徑不能包含 ..")
+        
+        # 如果不是絕對路徑，加上 /workspace 前綴
+        if not file_path.startswith('/'):
+            full_path = f"/workspace/{file_path}"
+        else:
+            full_path = file_path
+        
+        try:
+            # 先檢查檔案大小
+            size_cmd = f"stat -c %s '{full_path}' 2>/dev/null || echo 0"
+            size_result = subprocess.run(
+                ["docker", "exec", container_id, "sh", "-c", size_cmd],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            
+            file_size = int(size_result.stdout.strip() or 0)
+            
+            if file_size == 0:
+                # 檔案不存在或為空
+                raise FileNotFoundError(f"檔案不存在或為空: {full_path}")
+            
+            if file_size > max_size:
+                raise ValueError(f"檔案過大: {file_size} bytes (最大 {max_size} bytes)")
+            
+            # 讀取檔案內容
+            read_cmd = f"cat '{full_path}'"
+            result = subprocess.run(
+                ["docker", "exec", container_id, "sh", "-c", read_cmd],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+            
+            if result.returncode != 0:
+                raise FileNotFoundError(f"無法讀取檔案: {result.stderr}")
+            
+            return {
+                "path": file_path,
+                "content": result.stdout,
+                "size": file_size
+            }
+            
+        except subprocess.TimeoutExpired:
+            logger.error(f"讀取檔案超時: {full_path}")
+            raise Exception("讀取檔案超時")
+        except (FileNotFoundError, ValueError):
+            raise
+        except Exception as e:
+            logger.error(f"讀取檔案失敗: {e}")
+            raise

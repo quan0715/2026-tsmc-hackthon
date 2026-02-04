@@ -14,6 +14,8 @@ from ..schemas.project import (
     UpdateProjectRequest,
     ProjectResponse,
     ProjectListResponse,
+    FileTreeResponse,
+    FileContentResponse,
 )
 from ..schemas.provision import ProvisionResponse
 from ..schemas.execution import ExecCommandRequest, ExecCommandResponse
@@ -262,4 +264,77 @@ async def delete_project(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="專案不存在"
+        )
+
+
+@router.get("/{project_id}/files", response_model=FileTreeResponse)
+async def get_file_tree(
+    project_id: str,
+    service: ProjectService = Depends(get_project_service),
+    project = Depends(verify_project_access),
+):
+    """取得專案檔案樹（需要認證）"""
+    if not project.container_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="專案尚未 provision，請先執行 provision",
+        )
+
+    try:
+        container_service = ContainerService()
+        # 排除 /workspace/agent 目錄
+        tree = container_service.list_files(
+            project.container_id,
+            path="/workspace",
+            exclude_patterns=["/workspace/agent"]
+        )
+        return FileTreeResponse(root="/workspace", tree=tree)
+    except Exception as e:
+        logger.error(f"取得檔案樹失敗: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"取得檔案樹失敗: {str(e)}",
+        )
+
+
+@router.get("/{project_id}/files/{file_path:path}", response_model=FileContentResponse)
+async def get_file_content(
+    project_id: str,
+    file_path: str,
+    service: ProjectService = Depends(get_project_service),
+    project = Depends(verify_project_access),
+):
+    """讀取專案檔案內容（需要認證）"""
+    if not project.container_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="專案尚未 provision，請先執行 provision",
+        )
+
+    # 安全檢查：不允許讀取 agent 目錄
+    if file_path.startswith("agent/") or "/agent/" in file_path:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="不允許存取 agent 目錄",
+        )
+
+    try:
+        container_service = ContainerService()
+        result = container_service.read_file(project.container_id, file_path)
+        return FileContentResponse(**result)
+    except FileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except Exception as e:
+        logger.error(f"讀取檔案失敗: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"讀取檔案失敗: {str(e)}",
         )

@@ -19,35 +19,12 @@ _session_state = {
 
 # === Tool Description（用於注入 system_prompt）===
 BASH_DESCRIPTION = """
-執行 bash 命令的工具。提供持久的 bash 會話，支援環境變數和工作目錄狀態保持。
+執行 bash 命令。會話狀態（cwd、env）會保持。
 
-**參數：**
-- `command` (str): 要執行的 bash 命令
-- `restart` (bool): 是否重置 session（清除 cwd 和環境變數），預設 False
-- `timeout` (int): 命令超時秒數，預設 120
-
-**使用範例：**
-```python
-# 列出檔案
-bash(command="ls -la")
-
-# 執行腳本
-bash(command="python3 main.py")
-
-# 安裝套件
-bash(command="pip install requests")
-
-# 切換目錄（會保持狀態）
-bash(command="cd /workspace && pwd")
-
-# 重新啟動會話
-bash(restart=True)
-```
-
-**注意事項：**
-- 會話狀態（工作目錄、環境變數）在命令之間保持
-- 無法處理交互式命令（vim、less、密碼提示等）
-- 輸出超過 50000 字元或 200 行會被截斷
+範例：
+- `bash(command="go test ./...")`
+- `bash(command="cd /workspace/refactor-repo && go run main.go")`
+- `bash(restart=True)` 重置會話
 """.strip()
 
 

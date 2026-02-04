@@ -1,7 +1,7 @@
 """專案 API Schema"""
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Literal
 from ..models.project import ProjectStatus, ProjectType
 
 
@@ -95,3 +95,27 @@ class ProjectListResponse(BaseModel):
 
     total: int = Field(..., description="總數")
     projects: list[ProjectResponse] = Field(..., description="專案列表")
+
+
+class FileTreeNode(BaseModel):
+    """檔案樹節點"""
+
+    name: str = Field(..., description="檔案或目錄名稱")
+    path: str = Field(..., description="相對路徑")
+    type: Literal["file", "directory"] = Field(..., description="節點類型")
+    children: Optional[List["FileTreeNode"]] = Field(None, description="子節點（僅目錄有）")
+
+
+class FileTreeResponse(BaseModel):
+    """檔案樹回應"""
+
+    root: str = Field(..., description="根目錄路徑")
+    tree: List[FileTreeNode] = Field(..., description="檔案樹")
+
+
+class FileContentResponse(BaseModel):
+    """檔案內容回應"""
+
+    path: str = Field(..., description="檔案路徑")
+    content: str = Field(..., description="檔案內容")
+    size: int = Field(..., description="檔案大小（bytes）")

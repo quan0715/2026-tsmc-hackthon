@@ -1,841 +1,416 @@
-import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { useAuth } from '@/contexts/AuthContext'
+import { useEffect, useState, useCallback } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   getProjectAPI,
-  provisionProjectAPI,
-  stopProjectAPI,
-  deleteProjectAPI,
   updateProjectAPI,
+  deleteProjectAPI,
+  provisionProjectAPI,
+  reprovisionProjectAPI,
 } from '@/services/project.service'
-import { getAgentRunsAPI } from '@/services/agent.service'
-import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import type { Project } from '@/types/project.types'
-import type { AgentRunDetail } from '@/types/agent.types'
-import { AgentLogStream } from '@/components/agent/AgentLogStream'
 import {
-  PlayCircle,
-  StopCircle,
-  RotateCcw,
-  CheckCircle,
-  Clock,
-  XCircle,
-  ChevronRight,
-  Sparkles,
-  FileCode,
-  MessageSquare,
-  Pencil,
-  Trash2,
+  getAgentRunsAPI,
+  startAgentRunAPI,
+  stopAgentRunAPI,
+  resetRefactorSessionAPI,
+} from '@/services/agent.service'
+import { getFileTreeAPI, getFileContentAPI } from '@/services/file.service'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { AgentLogStream } from '@/components/agent/AgentLogStream'
+import { TaskList, type Task } from '@/components/agent/TaskList'
+import { FileTree } from '@/components/file/FileTree'
+import { FileViewer } from '@/components/file/FileViewer'
+import { ProjectSettingsModal } from '@/components/project/ProjectSettingsModal'
+import type { Project } from '@/types/project.types'
+import { AgentRunStatus } from '@/types/agent.types'
+import type { AgentRunDetail } from '@/types/agent.types'
+import type { FileTreeNode, OpenFile } from '@/types/file.types'
+import {
+  Play,
+  Square,
+  Settings,
+  ArrowLeft,
+  Loader2,
   RefreshCw,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  GripVertical,
 } from 'lucide-react'
-import { startAgentRunAPI, stopAgentRunAPI, resumeAgentRunAPI, resetRefactorSessionAPI } from '@/services/agent.service'
-import { reprovisionProjectAPI } from '@/services/project.service'
-
-// 狀態顏色映射
-const statusColors: Record<string, 'default' | 'secondary' | 'destructive' | 'success' | 'warning'> = {
-  CREATED: 'secondary',
-  PROVISIONING: 'warning',
-  READY: 'success',
-  RUNNING: 'default',
-  STOPPED: 'secondary',
-  FAILED: 'destructive',
-}
-
-// 假資料（之後會逐步替換為真實資料）
-const mockData = {
-  testCoverage: 87,
-  codeQuality: 92,
-  tasks: [
-    { id: '1', name: 'Performance Optimization', status: 'completed' as const, files: 5, added: 120, removed: 85 },
-    { id: '2', name: 'Error Handling Enhancement', status: 'in_progress' as const, files: 3, added: 65, removed: 40 },
-    { id: '3', name: 'Test Coverage Improvement', status: 'pending' as const, files: 0, added: 0, removed: 0 },
-  ],
-  report: {
-    files: 8,
-    lines: 185,
-    currentStatus: 'Optimization phase in progress',
-    achievements: [
-      { text: 'Performance optimization completed', status: 'completed' },
-      { text: 'Error handling enhancement in progress', status: 'in_progress' },
-      { text: 'Test coverage improvement pending', status: 'pending' },
-    ],
-    metrics: {
-      performanceImprovement: 35,
-      testCoverage: 87,
-      targetCoverage: 90,
-      codeQuality: 92,
-    },
-  },
-}
-
-// 計算運行時間
-function calculateRuntime(startTime: string): string {
-  const start = new Date(startTime).getTime()
-  const now = Date.now()
-  const diff = now - start
-
-  const hours = Math.floor(diff / (1000 * 60 * 60))
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000)
-
-  if (hours > 0) {
-    return `${hours}h ${minutes}m ${seconds}s`
-  } else if (minutes > 0) {
-    return `${minutes}m ${seconds}s`
-  }
-  return `${seconds}s`
-}
-
-// 格式化時間
-function formatTime(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-}
+import { Group, Panel, Separator } from 'react-resizable-panels'
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { user } = useAuth()
+  const navigate = useNavigate()
+
+  // Project state
   const [project, setProject] = useState<Project | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [executing, setExecuting] = useState(false)
-  const [runs, setRuns] = useState<AgentRunDetail[]>([])
+  const [, setRuns] = useState<AgentRunDetail[]>([])
   const [currentRun, setCurrentRun] = useState<AgentRunDetail | null>(null)
-  const [selectedTab, setSelectedTab] = useState<'spec' | 'report' | 'diff'>('report')
-  const [totalRuntime, setTotalRuntime] = useState('0s')
-  const [iterationRuntime, setIterationRuntime] = useState('0s')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // 編輯相關狀態
-  const [isEditing, setIsEditing] = useState(false)
-  const [editForm, setEditForm] = useState({
-    title: '',
-    description: '',
-    repo_url: '',
-    branch: '',
-    spec: '',
-  })
+  // File state
+  const [fileTree, setFileTree] = useState<FileTreeNode[]>([])
+  const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
+  const [activeFilePath, setActiveFilePath] = useState<string | null>(null)
+  const [loadingTree, setLoadingTree] = useState(false)
 
-  // Agent 控制狀態
+  // Task state
+  const [tasks, setTasks] = useState<Task[]>([])
+
+  // UI state
+  const [showSettings, setShowSettings] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
-  const [isResuming, setIsResuming] = useState(false)
-  const [isReprovisioning, setIsReprovisioning] = useState(false)
-  const [isResettingSession, setIsResettingSession] = useState(false)
+  const [isProvisioning, setIsProvisioning] = useState(false)
 
-  useEffect(() => {
-    if (id) {
-      loadProject()
-      loadRuns()
+  // Panel collapse state (only left and right panels can collapse)
+  const [infoCollapsed, setInfoCollapsed] = useState(false)
+  const [treeCollapsed, setTreeCollapsed] = useState(false)
+
+  // Runtime calculation
+  const [runtime, setRuntime] = useState('00:00:00')
+
+  // Load project data
+  const loadProject = useCallback(async () => {
+    if (!id) return
+    try {
+      const data = await getProjectAPI(id)
+      setProject(data)
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to load project')
     }
   }, [id])
 
-  // 定時更新運行時間
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (project?.created_at) {
-        setTotalRuntime(calculateRuntime(project.created_at))
-      }
-      if (currentRun?.created_at && currentRun.status === 'RUNNING') {
-        setIterationRuntime(calculateRuntime(currentRun.created_at))
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [project?.created_at, currentRun?.created_at, currentRun?.status])
+  // Load agent runs
+  const loadRuns = useCallback(async () => {
+    if (!id) return
+    try {
+      const data = await getAgentRunsAPI(id)
+      const runsList = data.runs || []
+      setRuns(runsList)
+      const running = runsList.find((r: AgentRunDetail) => r.status === 'RUNNING')
+      const latest = runsList[0]
+      setCurrentRun(running || latest || null)
+    } catch (err) {
+      console.error('Failed to load runs:', err)
+    }
+  }, [id])
 
-  // 輪詢狀態更新
+  // Load file tree
+  const loadFileTree = useCallback(async () => {
+    if (!id || !project?.container_id) return
+    setLoadingTree(true)
+    try {
+      const data = await getFileTreeAPI(id)
+      setFileTree(data.tree)
+    } catch (err) {
+      console.error('Failed to load file tree:', err)
+    } finally {
+      setLoadingTree(false)
+    }
+  }, [id, project?.container_id])
+
+  // Initial load
+  useEffect(() => {
+    const init = async () => {
+      setLoading(true)
+      await loadProject()
+      await loadRuns()
+      setLoading(false)
+    }
+    init()
+  }, [loadProject, loadRuns])
+
+  // Load file tree when project is ready
+  useEffect(() => {
+    if (project?.status === 'READY' || project?.status === 'RUNNING') {
+      loadFileTree()
+    }
+  }, [project?.status, loadFileTree])
+
+  // Poll runs when agent is running
   useEffect(() => {
     if (currentRun?.status === 'RUNNING') {
       const interval = setInterval(loadRuns, 5000)
       return () => clearInterval(interval)
     }
-  }, [currentRun?.status])
+  }, [currentRun?.status, loadRuns])
 
-  const loadProject = async () => {
-    try {
-      const data = await getProjectAPI(id!)
-      setProject(data)
-    } catch (error) {
-      console.error('載入專案失敗', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadRuns = async () => {
-    try {
-      const data = await getAgentRunsAPI(id!)
-      setRuns(data.runs)
-
-      // 找到最新的 RUNNING run 或最後一個 run
-      const runningRun = data.runs.find((r) => r.status === 'RUNNING')
-      if (runningRun) {
-        setCurrentRun(runningRun)
-      } else if (data.runs.length > 0) {
-        setCurrentRun(data.runs[0])
+  // Update runtime
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (currentRun?.created_at && currentRun.status === 'RUNNING') {
+        const start = new Date(currentRun.created_at).getTime()
+        const now = Date.now()
+        const diff = Math.floor((now - start) / 1000)
+        const h = Math.floor(diff / 3600)
+        const m = Math.floor((diff % 3600) / 60)
+        const s = diff % 60
+        setRuntime(
+          `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+        )
+      } else {
+        setRuntime('--:--:--')
       }
-    } catch (error) {
-      console.error('載入 Agent Runs 失敗', error)
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [currentRun?.created_at, currentRun?.status])
+
+  // File operations
+  const handleFileSelect = async (path: string, name: string) => {
+    // Check if already open
+    const existing = openFiles.find((f) => f.path === path)
+    if (existing) {
+      setActiveFilePath(path)
+      return
+    }
+
+    // Add loading placeholder
+    const newFile: OpenFile = { path, name, content: '', isLoading: true }
+    setOpenFiles((prev) => [...prev, newFile])
+    setActiveFilePath(path)
+
+    // Load content
+    try {
+      const data = await getFileContentAPI(id!, path)
+      setOpenFiles((prev) =>
+        prev.map((f) =>
+          f.path === path ? { ...f, content: data.content, isLoading: false } : f
+        )
+      )
+    } catch (err) {
+      console.error('Failed to load file:', err)
+      setOpenFiles((prev) =>
+        prev.map((f) =>
+          f.path === path ? { ...f, content: 'Failed to load file', isLoading: false } : f
+        )
+      )
     }
   }
 
+  const handleTabClose = (path: string) => {
+    setOpenFiles((prev) => prev.filter((f) => f.path !== path))
+    if (activeFilePath === path) {
+      const remaining = openFiles.filter((f) => f.path !== path)
+      setActiveFilePath(remaining.length > 0 ? remaining[remaining.length - 1].path : null)
+    }
+  }
+
+  // Agent operations
   const handleProvision = async () => {
+    if (!id) return
+    setIsProvisioning(true)
     try {
-      setExecuting(true)
-      await provisionProjectAPI(id!)
+      await provisionProjectAPI(id)
       await loadProject()
-    } catch (error: any) {
-      alert(error.response?.data?.detail || 'Provision 失敗')
+      await loadFileTree()
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Provision failed')
     } finally {
-      setExecuting(false)
+      setIsProvisioning(false)
     }
   }
 
-  const handleStop = async () => {
-    if (!confirm('確定要停止此專案嗎？')) return
-
-    try {
-      await stopProjectAPI(id!)
-      await loadProject()
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '停止專案失敗')
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!confirm('確定要刪除此專案嗎？此操作無法復原！')) return
-
-    try {
-      await deleteProjectAPI(id!)
-      window.location.href = '/projects'
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '刪除專案失敗')
-    }
-  }
-
-  const handleEdit = () => {
-    if (project) {
-      setEditForm({
-        title: project.title || '',
-        description: project.description || '',
-        repo_url: project.repo_url || '',
-        branch: project.branch,
-        spec: project.spec,
-      })
-      setIsEditing(true)
-    }
-  }
-
-  const handleCancelEdit = () => {
-    setIsEditing(false)
-  }
-
-  const handleSaveEdit = async () => {
-    try {
-      setExecuting(true)
-      const updated = await updateProjectAPI(id!, editForm)
-      setProject(updated)
-      setIsEditing(false)
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '更新專案失敗')
-    } finally {
-      setExecuting(false)
-    }
-  }
-
-  // Agent 控制函數
   const handleStartAgent = async () => {
+    if (!id) return
     setIsStarting(true)
     try {
-      await startAgentRunAPI(id!)
+      await startAgentRunAPI(id)
       await loadRuns()
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '啟動失敗')
+      await loadProject()
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to start')
     } finally {
       setIsStarting(false)
     }
   }
 
   const handleStopAgent = async () => {
-    if (!currentRun) return
+    if (!id || !currentRun) return
     if (!confirm('確定要停止重構嗎？')) return
-
     setIsStopping(true)
     try {
-      await stopAgentRunAPI(id!, currentRun.id)
-      // 立即更新狀態為 STOPPED，停止輪詢
-      setCurrentRun({ ...currentRun, status: 'STOPPED' })
-      // 延遲一下再重新載入，讓後端有時間完成停止
+      await stopAgentRunAPI(id, currentRun.id)
+      setCurrentRun({ ...currentRun, status: AgentRunStatus.STOPPED })
       setTimeout(async () => {
         await loadRuns()
         await loadProject()
       }, 2000)
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '停止失敗')
+    } catch (err: any) {
+      alert(err.response?.data?.detail || 'Failed to stop')
     } finally {
       setIsStopping(false)
     }
   }
 
-  const handleResumeAgent = async () => {
-    if (!currentRun) return
+  // Settings operations
+  const handleSaveSettings = async (data: { title?: string; description?: string; spec?: string }) => {
+    if (!id) return
+    await updateProjectAPI(id, data)
+    await loadProject()
+  }
 
-    setIsResuming(true)
-    try {
-      await resumeAgentRunAPI(id!, currentRun.id)
-      await loadRuns()
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '繼續失敗')
-    } finally {
-      setIsResuming(false)
-    }
+  const handleDelete = async () => {
+    if (!id) return
+    await deleteProjectAPI(id)
+    navigate('/projects')
   }
 
   const handleReprovision = async () => {
-    if (!confirm('確定要重設專案嗎？這將刪除容器並重新建立。')) return
-
-    setIsReprovisioning(true)
-    try {
-      await reprovisionProjectAPI(id!)
-      setCurrentRun(null)
-      await loadProject()
-      await loadRuns()
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '重設失敗')
-    } finally {
-      setIsReprovisioning(false)
-    }
+    if (!id) return
+    await reprovisionProjectAPI(id)
+    await loadProject()
+    await loadFileTree()
   }
 
   const handleResetSession = async () => {
-    if (!confirm('確定要重新開始重構嗎？這將清除之前的對話歷史，Agent 會從頭開始。')) return
-
-    setIsResettingSession(true)
-    try {
-      await resetRefactorSessionAPI(id!)
-      await loadProject()
-      alert('重構會話已重設，下次開始重構時會建立新的會話')
-    } catch (error: any) {
-      alert(error.response?.data?.detail || '重設會話失敗')
-    } finally {
-      setIsResettingSession(false)
-    }
+    if (!id) return
+    await resetRefactorSessionAPI(id)
+    await loadProject()
   }
 
-  const isRunning = currentRun?.status === 'RUNNING'
-  const canStart = project?.status === 'READY' && !isRunning
-  const isDone = currentRun?.status === 'DONE'
-  const isFailed = currentRun?.status === 'FAILED'
-  const isStopped = currentRun?.status === 'STOPPED'
-  const canResume = isStopped || isFailed
-
+  // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-900">
-        <div className="text-lg text-gray-300">載入中...</div>
+      <div className="h-screen flex items-center justify-center bg-gray-900">
+        <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
       </div>
     )
   }
 
-  if (!project) {
+  // Error state
+  if (error || !project) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-900">
-        <div className="text-lg text-gray-300">專案不存在</div>
+      <div className="h-screen flex items-center justify-center bg-gray-900">
+        <div className="text-center">
+          <div className="text-red-400 mb-4">{error || 'Project not found'}</div>
+          <Link to="/projects" className="text-purple-400 hover:underline">
+            Back to projects
+          </Link>
+        </div>
       </div>
     )
   }
 
-  const projectName = project.title || project.repo_url?.split('/').pop()?.replace('.git', '') || 'Sandbox'
+  const projectName = project.title || project.repo_url?.split('/').pop()?.replace('.git', '') || 'Project'
+  const isRunning = currentRun?.status === 'RUNNING'
+  const canStart = project.status === 'READY' && !isRunning
+  const needsProvision = project.status === 'CREATED' || project.status === 'FAILED'
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100">
-      {/* Header */}
-      <header className="bg-gray-900 border-b border-gray-800 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm">
-            <Link to="/projects" className="flex items-center gap-2 text-gray-400 hover:text-gray-200">
-              <div className="w-6 h-6 bg-orange-500 rounded flex items-center justify-center text-white text-xs font-bold">
-                smo
-              </div>
-              <span>AI 舊程式碼智能重構系統</span>
-            </Link>
-            <ChevronRight className="w-4 h-4 text-gray-600" />
-            <span className="text-gray-200">{projectName}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-400">{user?.username || user?.email}</span>
-            <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center text-sm">
-              {(user?.username || user?.email || 'U').charAt(0).toUpperCase()}
-            </div>
-          </div>
+    <div className="h-screen flex flex-col bg-gray-900 text-gray-100">
+      {/* Header Bar */}
+      <header className="h-10 flex items-center justify-between px-3 border-b border-gray-700 bg-gray-800 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setInfoCollapsed(!infoCollapsed)}
+            className="p-1 hover:bg-gray-700 rounded"
+            title={infoCollapsed ? 'Expand left panel' : 'Collapse left panel'}
+          >
+            {infoCollapsed ? (
+              <PanelLeftOpen className="w-4 h-4" />
+            ) : (
+              <PanelLeftClose className="w-4 h-4" />
+            )}
+          </button>
+          <Link to="/projects" className="text-gray-400 hover:text-white">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <h1 className="text-sm font-medium truncate" title={projectName}>
+            {projectName}
+          </h1>
+          <StatusBadge status={project.status} />
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setTreeCollapsed(!treeCollapsed)}
+            className="p-1 hover:bg-gray-700 rounded"
+            title={treeCollapsed ? 'Expand right panel' : 'Collapse right panel'}
+          >
+            {treeCollapsed ? (
+              <PanelRightOpen className="w-4 h-4" />
+            ) : (
+              <PanelRightClose className="w-4 h-4" />
+            )}
+          </button>
         </div>
       </header>
 
-      {/* Project Title Bar */}
-      <div className="bg-gray-900 border-b border-gray-800 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold">{project.title || projectName}</h1>
-              <button
-                onClick={handleEdit}
-                className="p-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
-                title="編輯專案"
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-            </div>
-            <Badge
-              variant={statusColors[project.status]}
-              className="flex items-center gap-1.5"
-            >
-              <span className={`w-2 h-2 rounded-full ${
-                project.status === 'RUNNING' || isRunning ? 'bg-orange-400 animate-pulse' :
-                project.status === 'READY' ? 'bg-green-400' :
-                project.status === 'FAILED' ? 'bg-red-400' :
-                'bg-gray-400'
-              }`} />
-              {isRunning ? 'RUNNING' : project.status} {currentRun ? `- Iteration ${currentRun.iteration_index}` : ''}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-3">
-            {/* Chat Button */}
-            {project.status === 'READY' && (
-              <Link to={`/projects/${id}/chat`}>
-                <Button variant="outline">
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  聊天
-                </Button>
-              </Link>
-            )}
-            {/* Main Action Button */}
-            {project.status === 'CREATED' && (
-              <Button onClick={handleProvision} disabled={executing}>
-                {executing ? 'Provisioning...' : 'Provision'}
-              </Button>
-            )}
-            {project.status === 'READY' && !isRunning && (
-              <Button
-                onClick={canResume ? handleResumeAgent : handleStartAgent}
-                disabled={isStarting || isResuming}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                <PlayCircle className="w-4 h-4 mr-2" />
-                {isStarting || isResuming ? '啟動中...' : canResume ? '繼續重構' : '開始重構'}
-              </Button>
-            )}
-            {isRunning && (
-              <Button
-                onClick={handleStopAgent}
-                variant="destructive"
-                disabled={isStopping}
-              >
-                <StopCircle className="w-4 h-4 mr-2" />
-                {isStopping ? '停止中...' : '停止重構'}
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* 編輯模式 */}
-      {isEditing && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-            <h2 className="text-xl font-semibold mb-4">編輯專案</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">專案標題</label>
-                <Input
-                  value={editForm.title}
-                  onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                  placeholder="選填，未填則使用 repo 名稱"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">專案描述</label>
-                <Textarea
-                  value={editForm.description}
-                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                  placeholder="選填"
-                  rows={2}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">Repository URL</label>
-                <Input
-                  value={editForm.repo_url}
-                  onChange={(e) => setEditForm({ ...editForm, repo_url: e.target.value })}
-                  disabled={project.status !== 'CREATED'}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">Branch</label>
-                <Input
-                  value={editForm.branch}
-                  onChange={(e) => setEditForm({ ...editForm, branch: e.target.value })}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">Spec</label>
-                <Textarea
-                  value={editForm.spec}
-                  onChange={(e) => setEditForm({ ...editForm, spec: e.target.value })}
-                  rows={5}
-                  placeholder="描述重構目標、規格和期望結果..."
-                />
-              </div>
-            </div>
-            <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-700">
-              <div className="flex gap-2">
-                {/* 重新開始重構 - 只在有進行中會話時顯示 */}
-                {project.refactor_thread_id && (
-                  <Button
-                    variant="ghost"
-                    onClick={handleResetSession}
-                    disabled={executing || isResettingSession || isRunning}
-                    className="text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
-                  >
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    {isResettingSession ? '重設中...' : '重新開始'}
-                  </Button>
-                )}
-                {project.status === 'READY' && !isRunning && (
-                  <Button
-                    variant="ghost"
-                    onClick={handleReprovision}
-                    disabled={executing || isReprovisioning}
-                    className="text-orange-400 hover:text-orange-300 hover:bg-orange-900/20"
-                  >
-                    <RotateCcw className="w-4 h-4 mr-2" />
-                    {isReprovisioning ? '重設中...' : '重設專案'}
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  onClick={handleDelete}
-                  disabled={executing}
-                  className="text-red-400 hover:text-red-300 hover:bg-red-900/20"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  刪除專案
-                </Button>
-              </div>
-              <div className="flex gap-3">
-                <Button variant="outline" onClick={handleCancelEdit} disabled={executing}>
-                  取消
-                </Button>
-                <Button onClick={handleSaveEdit} disabled={executing}>
-                  {executing ? '儲存中...' : '儲存'}
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content - Three Column Layout */}
-      <div className="flex flex-col lg:flex-row h-[calc(100vh-140px)]">
-        {/* Left Panel - Project Overview */}
-        <div className="lg:w-72 xl:w-80 flex-shrink-0 overflow-y-auto border-r border-gray-800 bg-gray-850">
-          {/* Project Overview Section */}
-          <div className="p-4 border-b border-gray-800">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Project Overview</h2>
-            <div className="space-y-3">
-              <div>
-                <h3 className="font-medium text-gray-200">{project.title || projectName}</h3>
-                {project.description && (
-                  <p className="text-sm text-gray-400 mt-1">{project.description}</p>
-                )}
-              </div>
-              {project.repo_url && (
-                <div className="text-xs text-gray-500 break-all">
-                  {project.repo_url}
+      {/* Main Content */}
+      <Group orientation="horizontal" className="flex-1">
+        {/* Panel 1: Project Info */}
+        {!infoCollapsed && (
+          <>
+            <Panel id="info" defaultSize="15%" minSize="10%" maxSize="25%">
+              <div className="h-full flex flex-col border-r border-gray-800">
+                <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800">
+                  <span className="text-xs text-gray-500 uppercase">Info</span>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Spec Section */}
-          <div className="p-4 border-b border-gray-800">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Spec</h2>
-            <p className="text-sm text-gray-300 leading-relaxed">{project.spec}</p>
-          </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-2 border-b border-gray-800">
-            <div className="p-3 border-r border-b border-gray-800">
-              <div className="flex items-center gap-2 text-purple-400 mb-1">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div className="text-2xl font-bold">#{currentRun?.iteration_index || runs.length || 0}</div>
-              <div className="text-xs text-gray-400">當前迭代</div>
-            </div>
-            <div className="p-3 border-b border-gray-800">
-              <div className="flex items-center gap-2 text-green-400 mb-1">
-                <CheckCircle className="w-4 h-4" />
-              </div>
-              <div className="text-2xl font-bold">{runs.filter(r => r.status === 'DONE').length}</div>
-              <div className="text-xs text-gray-400">已完成</div>
-            </div>
-            <div className="p-3 border-r border-gray-800">
-              <div className="flex items-center gap-2 text-blue-400 mb-1">
-                <FileCode className="w-4 h-4" />
-              </div>
-              <div className="text-2xl font-bold">{mockData.testCoverage}%</div>
-              <div className="text-xs text-gray-400">平均覆蓋率</div>
-            </div>
-            <div className="p-3">
-              <div className="flex items-center gap-2 text-yellow-400 mb-1">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <div className="text-2xl font-bold">{mockData.codeQuality}%</div>
-              <div className="text-xs text-gray-400">程式品質</div>
-            </div>
-          </div>
-
-          {/* Iterations List */}
-          <div className="p-4">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Iterations</h2>
-            <div className="space-y-2">
-              {runs.length > 0 ? runs.slice(0, 5).map((run) => (
-                <div
-                  key={run.id}
-                  className={`p-3 rounded-lg ${
-                    currentRun?.id === run.id
-                      ? 'border-l-2 border-purple-500 bg-purple-900/20'
-                      : 'border-l-2 border-transparent bg-gray-800/50 hover:bg-gray-800'
-                  } cursor-pointer transition-colors`}
-                  onClick={() => setCurrentRun(run)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {run.status === 'DONE' ? (
-                        <CheckCircle className="w-4 h-4 text-green-400" />
-                      ) : run.status === 'RUNNING' ? (
-                        <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                      ) : run.status === 'FAILED' ? (
-                        <XCircle className="w-4 h-4 text-red-400" />
-                      ) : (
-                        <Clock className="w-4 h-4 text-gray-400" />
-                      )}
-                      <span className="font-medium">Iteration {run.iteration_index}</span>
+                <div className="p-2 space-y-2 text-xs border-b border-gray-800">
+                  <div className="flex justify-between text-gray-400">
+                    <span>Iteration</span>
+                    <span className="text-white">#{currentRun?.iteration_index || 0}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-400">
+                    <span>Runtime</span>
+                    <span className="text-white font-mono">{runtime}</span>
+                  </div>
+                  {currentRun && (
+                    <div className="flex justify-between text-gray-400">
+                      <span>Phase</span>
+                      <span className="text-white capitalize">{currentRun.phase}</span>
                     </div>
+                  )}
+                </div>
+
+                {tasks.length > 0 && (
+                  <div className="flex-1 overflow-y-auto p-2">
+                    <TaskList tasks={tasks} compact />
                   </div>
-                  <div className="flex items-center justify-between mt-1 text-xs text-gray-400">
-                    <span>{run.phase === 'plan' ? 'Initial Refactor' : run.phase === 'test' ? 'Optimization & Testing' : run.phase}</span>
-                    <span>{run.created_at ? calculateRuntime(run.created_at) : '—'}</span>
-                  </div>
-                </div>
-              )) : (
-                <div className="text-sm text-gray-500 text-center py-4">
-                  尚無迭代記錄
-                </div>
-              )}
-            </div>
-          </div>
+                )}
 
-        </div>
+                {tasks.length === 0 && <div className="flex-1" />}
 
-        {/* Middle Panel - Iteration Info */}
-        <div className="lg:w-72 xl:w-80 flex-shrink-0 overflow-y-auto border-r border-gray-800">
-          {/* Iteration Info Header */}
-          <div className="grid grid-cols-2 border-b border-gray-800">
-            <div className="p-4 border-r border-gray-800">
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Iteration N</h2>
-              <div className="text-3xl font-bold">{currentRun?.iteration_index || runs.length || '—'}</div>
-            </div>
-            <div className="p-4">
-              <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Iteration Info</h2>
-              <Badge
-                variant={isRunning ? 'warning' : isDone ? 'success' : isFailed ? 'destructive' : 'secondary'}
-                className="text-sm"
-              >
-                {currentRun?.status || 'N/A'}
-              </Badge>
-            </div>
-          </div>
-
-          {/* Iteration Details */}
-          <div className="p-4 border-b border-gray-800">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Iteration Info</h2>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Phase</span>
-                <span className="text-orange-400">{currentRun?.phase === 'plan' ? 'Optimization & Testing' : currentRun?.phase || 'N/A'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Start Time</span>
-                <span>{currentRun?.created_at ? formatTime(currentRun.created_at) : '—'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Runtime</span>
-                <span className="text-green-400">{iterationRuntime}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Metrics */}
-          <div className="p-4 border-b border-gray-800">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Metrics</h2>
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="flex items-center gap-2">
-                    <CheckCircle className="w-4 h-4 text-green-400" />
-                    Test Coverage
-                  </span>
-                  <span>{mockData.testCoverage}%</span>
-                </div>
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-green-500 rounded-full transition-all duration-500"
-                    style={{ width: `${mockData.testCoverage}%` }}
-                  />
+                <div className="p-2 space-y-2 border-t border-gray-800">
+                  {needsProvision ? (
+                    <Button className="w-full" size="sm" onClick={handleProvision} disabled={isProvisioning}>
+                      {isProvisioning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                      Provision
+                    </Button>
+                  ) : isRunning ? (
+                    <Button className="w-full" size="sm" variant="destructive" onClick={handleStopAgent} disabled={isStopping}>
+                      {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Square className="w-4 h-4 mr-1" />}
+                      Stop
+                    </Button>
+                  ) : canStart ? (
+                    <Button className="w-full" size="sm" onClick={handleStartAgent} disabled={isStarting}>
+                      {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}
+                      Start
+                    </Button>
+                  ) : null}
                 </div>
               </div>
-              <div>
-                <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-yellow-400" />
-                    Code Quality
-                  </span>
-                  <span>{mockData.codeQuality}%</span>
-                </div>
-                <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-yellow-500 rounded-full transition-all duration-500"
-                    style={{ width: `${mockData.codeQuality}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
+            </Panel>
+            <Separator className="w-1 bg-gray-700 hover:bg-purple-600 transition-colors flex items-center justify-center">
+              <GripVertical className="w-3 h-3 text-gray-500" />
+            </Separator>
+          </>
+        )}
 
-          {/* Tasks */}
-          <div className="p-4 border-b border-gray-800">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-              Tasks ({mockData.tasks.length})
-            </h2>
-            <div className="space-y-2">
-              {mockData.tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="p-3 rounded-lg bg-gray-800/50"
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    {task.status === 'completed' ? (
-                      <CheckCircle className="w-4 h-4 text-green-400" />
-                    ) : task.status === 'in_progress' ? (
-                      <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
-                    ) : (
-                      <Clock className="w-4 h-4 text-gray-400" />
-                    )}
-                    <span className="text-sm font-medium">{task.name}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <FileCode className="w-3 h-3" />
-                    <span>{task.files}</span>
-                    <span className="text-green-400">+{task.added}</span>
-                    <span className="text-red-400">-{task.removed}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-        </div>
-
-        {/* Right Panel - Report and Logs */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          {/* Report Section */}
-          <div className="flex-1 flex flex-col min-h-0 border-b border-gray-800">
-            {/* Report Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-purple-400" />
-                <span className="font-medium">
-                  Iteration {currentRun?.iteration_index || runs.length || '—'} - {currentRun?.phase === 'plan' ? 'Optimization & Testing' : currentRun?.phase || 'Report'}
-                </span>
-              </div>
-              <div className="flex items-center gap-4 text-sm text-gray-400">
-                <span className="flex items-center gap-1">
-                  <Clock className="w-4 h-4" />
-                  {currentRun?.created_at ? formatTime(currentRun.created_at) : '—'}
-                </span>
-                <span className="flex items-center gap-1">
-                  <FileCode className="w-4 h-4" />
-                  {mockData.report.files} files
-                </span>
-                <span>&lt;&gt; {mockData.report.lines} lines</span>
-              </div>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex border-b border-gray-800">
-              {(['spec', 'report', 'diff'] as const).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setSelectedTab(tab)}
-                  className={`px-4 py-2 text-sm font-medium transition-colors ${
-                    selectedTab === tab
-                      ? 'text-gray-100 border-b-2 border-purple-500'
-                      : 'text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  {tab}.md
-                </button>
-              ))}
-            </div>
-
-            {/* Report Content */}
-            <div className="flex-1 p-4 overflow-y-auto">
-              <div className="prose prose-invert prose-sm max-w-none">
-                <h1 className="text-lg font-semibold text-gray-100">
-                  # Iteration {currentRun?.iteration_index || runs.length || '—'} - Report {isRunning && <span className="text-orange-400">(In Progress)</span>}
-                </h1>
-                
-                <h2 className="text-base font-medium text-gray-200 mt-4">## Current Status</h2>
-                <p className="text-gray-400">{mockData.report.currentStatus}</p>
-                
-                <h2 className="text-base font-medium text-gray-200 mt-4">## Achievements So Far</h2>
-                <ul className="space-y-1">
-                  {mockData.report.achievements.map((achievement, idx) => (
-                    <li key={idx} className="flex items-center gap-2 text-gray-300">
-                      {achievement.status === 'completed' ? (
-                        <CheckCircle className="w-4 h-4 text-green-400" />
-                      ) : achievement.status === 'in_progress' ? (
-                        <span className="text-orange-400">🔄</span>
-                      ) : (
-                        <span className="text-red-400">🚫</span>
-                      )}
-                      {achievement.text}
-                    </li>
-                  ))}
-                </ul>
-                
-                <h2 className="text-base font-medium text-gray-200 mt-4">## Preliminary Metrics</h2>
-                <ul className="space-y-1 text-gray-400">
-                  <li>- Performance improvement: {mockData.report.metrics.performanceImprovement}%</li>
-                  <li>- Test coverage: {mockData.report.metrics.testCoverage}% (target: {mockData.report.metrics.targetCoverage}%)</li>
-                  <li>- Code quality: {mockData.report.metrics.codeQuality}%</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Live Logs Section */}
-          <div className="h-72 flex flex-col">
-            <div className="flex items-center gap-2 px-4 py-2 border-b border-gray-800">
-              <Sparkles className="w-4 h-4 text-purple-400" />
-              <span className="font-medium text-sm">Live Logs</span>
-              {isRunning && (
-                <span className="flex items-center gap-1 text-xs text-green-400">
-                  <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-                  Streaming
-                </span>
-              )}
+        {/* Panel 2: Live Logs */}
+        <Panel id="logs" defaultSize="25%" minSize="10%" maxSize="50%">
+          <div className="h-full flex flex-col border-r border-gray-800">
+            <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800">
+              <span className="text-xs text-gray-500 uppercase">Live Logs</span>
             </div>
             <div className="flex-1 overflow-hidden">
               {currentRun ? (
@@ -843,16 +418,89 @@ export default function ProjectDetailPage() {
                   projectId={id!}
                   runId={currentRun.id}
                   autoStart={isRunning}
+                  onTasksUpdate={setTasks}
                 />
               ) : (
-                <div className="flex items-center justify-center h-full text-gray-500 text-sm bg-gray-900">
-                  啟動重構後將顯示即時日誌
+                <div className="h-full flex items-center justify-center text-gray-500 text-sm">
+                  No active run
                 </div>
               )}
             </div>
           </div>
-        </div>
-      </div>
+        </Panel>
+
+        <Separator className="w-1 bg-gray-700 hover:bg-purple-600 transition-colors flex items-center justify-center">
+          <GripVertical className="w-3 h-3 text-gray-500" />
+        </Separator>
+
+        {/* Panel 3: File Viewer (main area) */}
+        <Panel id="viewer" defaultSize="40%" minSize="20%">
+          <div className="h-full overflow-hidden">
+            <FileViewer
+              files={openFiles}
+              activeFilePath={activeFilePath}
+              onTabSelect={setActiveFilePath}
+              onTabClose={handleTabClose}
+            />
+          </div>
+        </Panel>
+
+        <Separator className="w-1 bg-gray-700 hover:bg-purple-600 transition-colors flex items-center justify-center">
+          <GripVertical className="w-3 h-3 text-gray-500" />
+        </Separator>
+
+        {/* Panel 4: File Tree */}
+        {!treeCollapsed && (
+          <Panel id="tree" defaultSize="20%" minSize="10%" maxSize="35%">
+            <div className="h-full flex flex-col border-l border-gray-800">
+              <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800">
+                <span className="text-xs text-gray-500 uppercase">Explorer</span>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                {loadingTree ? (
+                  <div className="h-full flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+                  </div>
+                ) : (
+                  <FileTree
+                    tree={fileTree}
+                    onFileSelect={handleFileSelect}
+                    selectedPath={activeFilePath || undefined}
+                  />
+                )}
+              </div>
+            </div>
+          </Panel>
+        )}
+      </Group>
+
+      {/* Settings Modal */}
+      <ProjectSettingsModal
+        project={project}
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        onSave={handleSaveSettings}
+        onDelete={handleDelete}
+        onReprovision={handleReprovision}
+        onResetSession={handleResetSession}
+      />
     </div>
+  )
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'success' | 'warning'> = {
+    CREATED: 'secondary',
+    PROVISIONING: 'warning',
+    READY: 'success',
+    RUNNING: 'default',
+    STOPPED: 'secondary',
+    FAILED: 'destructive',
+  }
+
+  return (
+    <Badge variant={variants[status] || 'secondary'} className="text-xs">
+      {status}
+    </Badge>
   )
 }
