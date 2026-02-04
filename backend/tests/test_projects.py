@@ -13,7 +13,7 @@ async def test_create_project():
             json={
                 "repo_url": "https://github.com/user/repo.git",
                 "branch": "main",
-                "init_prompt": "Test project",
+                "spec": "Test project",
             },
         )
         assert response.status_code == 201
@@ -34,7 +34,7 @@ async def test_get_project():
             json={
                 "repo_url": "https://github.com/user/repo.git",
                 "branch": "main",
-                "init_prompt": "Test project",
+                "spec": "Test project",
             },
         )
         project_id = create_response.json()["id"]
@@ -66,7 +66,7 @@ async def test_list_projects():
                 json={
                     "repo_url": f"https://github.com/user/repo{i}.git",
                     "branch": "main",
-                    "init_prompt": f"Test project {i}",
+                    "spec": f"Test project {i}",
                 },
             )
 
@@ -90,7 +90,7 @@ async def test_delete_project():
             json={
                 "repo_url": "https://github.com/user/repo.git",
                 "branch": "main",
-                "init_prompt": "Test project",
+                "spec": "Test project",
             },
         )
         project_id = create_response.json()["id"]

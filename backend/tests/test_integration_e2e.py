@@ -14,7 +14,7 @@ async def test_complete_project_lifecycle():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "E2E 測試",
+                "spec": "E2E 測試",
             },
         )
         assert create_response.status_code == 201
@@ -74,7 +74,7 @@ async def test_error_handling_workflow():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "invalid-branch",
-                "init_prompt": "錯誤測試",
+                "spec": "錯誤測試",
             },
         )
         project_id = create_response.json()["id"]
@@ -114,7 +114,7 @@ async def test_multiple_projects():
                 json={
                     "repo_url": "https://github.com/octocat/Hello-World.git",
                     "branch": "master",
-                    "init_prompt": f"並行測試 {i}",
+                    "spec": f"並行測試 {i}",
                 },
             )
             assert response.status_code == 201
@@ -146,7 +146,7 @@ async def test_logs_streaming():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "日誌測試",
+                "spec": "日誌測試",
             },
         )
         project_id = create_response.json()["id"]

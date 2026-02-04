@@ -1,5 +1,8 @@
 """提示詞管理 - 集中管理所有 AI 提示詞"""
 
+from typing import Optional
+
+
 # === 系統提示詞 ===
 SYSTEM_PROMPT = """你是一個專業的程式碼分析專家 AI Agent。
 你的任務是深入分析程式碼庫,並實作你的分析結果
@@ -57,16 +60,39 @@ PROMPT_VARIANTS = {
 }
 
 
-def get_system_prompt(variant: str = "default") -> str:
+def get_system_prompt(
+    variant: str = "default",
+    include_tool_descriptions: bool = True,
+) -> str:
     """取得系統提示詞
 
     Args:
         variant: 提示詞變體 (default, verbose, concise)
+        include_tool_descriptions: 是否包含工具描述（從 registry 取得）
 
     Returns:
         系統提示詞字串
     """
-    return PROMPT_VARIANTS.get(variant, SYSTEM_PROMPT)
+    base_prompt = PROMPT_VARIANTS.get(variant, SYSTEM_PROMPT)
+
+    if include_tool_descriptions:
+        # 延遲 import 避免循環依賴
+        from agent.registry import get_tool_descriptions
+        tool_descriptions = get_tool_descriptions()
+        if tool_descriptions:
+            base_prompt = f"{base_prompt}\n\n{tool_descriptions}"
+
+    return base_prompt
+
+
+def get_tool_descriptions_section() -> str:
+    """單獨取得工具描述區塊
+
+    Returns:
+        格式化的工具描述文字
+    """
+    from agent.registry import get_tool_descriptions
+    return get_tool_descriptions()
 
 
 def build_user_message(

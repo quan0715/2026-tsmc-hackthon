@@ -14,7 +14,7 @@ async def test_stream_logs():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試日誌",
+                "spec": "測試日誌",
             },
         )
         project_id = create_response.json()["id"]
@@ -48,7 +48,7 @@ async def test_stream_logs_without_provision():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試",
+                "spec": "測試",
             },
         )
         project_id = create_response.json()["id"]

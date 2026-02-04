@@ -20,7 +20,8 @@ export interface Project {
   project_type: ProjectType
   repo_url?: string
   branch: string
-  init_prompt: string
+  spec: string  // 重構規格說明（原 init_prompt）
+  refactor_thread_id?: string  // 重構會話 ID
   status: ProjectStatus
   container_id?: string
   owner_id: string
@@ -44,7 +45,7 @@ export interface CreateProjectRequest {
   project_type: ProjectType
   repo_url?: string
   branch: string
-  init_prompt: string
+  spec: string  // 重構規格說明
 }
 
 export interface UpdateProjectRequest {
@@ -52,7 +53,7 @@ export interface UpdateProjectRequest {
   description?: string
   repo_url?: string
   branch?: string
-  init_prompt?: string
+  spec?: string  // 重構規格說明
 }
 
 export interface ExecCommandRequest {

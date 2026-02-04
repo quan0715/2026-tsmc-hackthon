@@ -29,8 +29,9 @@ import {
   MessageSquare,
   Pencil,
   Trash2,
+  RefreshCw,
 } from 'lucide-react'
-import { startAgentRunAPI, stopAgentRunAPI, resumeAgentRunAPI } from '@/services/agent.service'
+import { startAgentRunAPI, stopAgentRunAPI, resumeAgentRunAPI, resetRefactorSessionAPI } from '@/services/agent.service'
 import { reprovisionProjectAPI } from '@/services/project.service'
 
 // 狀態顏色映射
@@ -113,7 +114,7 @@ export default function ProjectDetailPage() {
     description: '',
     repo_url: '',
     branch: '',
-    init_prompt: '',
+    spec: '',
   })
 
   // Agent 控制狀態
@@ -121,6 +122,7 @@ export default function ProjectDetailPage() {
   const [isStopping, setIsStopping] = useState(false)
   const [isResuming, setIsResuming] = useState(false)
   const [isReprovisioning, setIsReprovisioning] = useState(false)
+  const [isResettingSession, setIsResettingSession] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -219,7 +221,7 @@ export default function ProjectDetailPage() {
         description: project.description || '',
         repo_url: project.repo_url || '',
         branch: project.branch,
-        init_prompt: project.init_prompt,
+        spec: project.spec,
       })
       setIsEditing(true)
     }
@@ -262,7 +264,13 @@ export default function ProjectDetailPage() {
     setIsStopping(true)
     try {
       await stopAgentRunAPI(id!, currentRun.id)
-      await loadRuns()
+      // 立即更新狀態為 STOPPED，停止輪詢
+      setCurrentRun({ ...currentRun, status: 'STOPPED' })
+      // 延遲一下再重新載入，讓後端有時間完成停止
+      setTimeout(async () => {
+        await loadRuns()
+        await loadProject()
+      }, 2000)
     } catch (error: any) {
       alert(error.response?.data?.detail || '停止失敗')
     } finally {
@@ -297,6 +305,21 @@ export default function ProjectDetailPage() {
       alert(error.response?.data?.detail || '重設失敗')
     } finally {
       setIsReprovisioning(false)
+    }
+  }
+
+  const handleResetSession = async () => {
+    if (!confirm('確定要重新開始重構嗎？這將清除之前的對話歷史，Agent 會從頭開始。')) return
+
+    setIsResettingSession(true)
+    try {
+      await resetRefactorSessionAPI(id!)
+      await loadProject()
+      alert('重構會話已重設，下次開始重構時會建立新的會話')
+    } catch (error: any) {
+      alert(error.response?.data?.detail || '重設會話失敗')
+    } finally {
+      setIsResettingSession(false)
     }
   }
 
@@ -455,16 +478,29 @@ export default function ProjectDetailPage() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-300">初始提示</label>
+                <label className="block text-sm font-medium mb-2 text-gray-300">Spec</label>
                 <Textarea
-                  value={editForm.init_prompt}
-                  onChange={(e) => setEditForm({ ...editForm, init_prompt: e.target.value })}
+                  value={editForm.spec}
+                  onChange={(e) => setEditForm({ ...editForm, spec: e.target.value })}
                   rows={5}
+                  placeholder="描述重構目標、規格和期望結果..."
                 />
               </div>
             </div>
             <div className="flex justify-between items-center mt-6 pt-4 border-t border-gray-700">
               <div className="flex gap-2">
+                {/* 重新開始重構 - 只在有進行中會話時顯示 */}
+                {project.refactor_thread_id && (
+                  <Button
+                    variant="ghost"
+                    onClick={handleResetSession}
+                    disabled={executing || isResettingSession || isRunning}
+                    className="text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    {isResettingSession ? '重設中...' : '重新開始'}
+                  </Button>
+                )}
                 {project.status === 'READY' && !isRunning && (
                   <Button
                     variant="ghost"
@@ -521,10 +557,10 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          {/* Init Prompt Section */}
+          {/* Spec Section */}
           <div className="p-4 border-b border-gray-800">
-            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Init Prompt</h2>
-            <p className="text-sm text-gray-300 leading-relaxed">{project.init_prompt}</p>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Spec</h2>
+            <p className="text-sm text-gray-300 leading-relaxed">{project.spec}</p>
           </div>
 
           {/* Stats Cards */}

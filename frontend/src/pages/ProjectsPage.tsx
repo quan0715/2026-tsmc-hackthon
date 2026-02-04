@@ -106,7 +106,7 @@ export default function ProjectsPage() {
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm text-gray-400 line-clamp-2 mb-2">
-                      {project.description || project.init_prompt}
+                      {project.description || project.spec}
                     </p>
                     <div className="text-xs text-gray-500">
                       <div>分支: {project.branch}</div>

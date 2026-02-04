@@ -23,10 +23,12 @@ class ProjectService:
     async def create_project(self, request: CreateProjectRequest, owner_id: str, owner_email: str = None) -> Project:
         """建立專案"""
         project = Project(
+            title=request.title,
+            description=request.description,
             project_type=request.project_type,
             repo_url=request.repo_url,
             branch=request.branch,
-            init_prompt=request.init_prompt,
+            spec=request.spec,
             status=ProjectStatus.CREATED,
             owner_id=owner_id,
             owner_email=owner_email,
@@ -109,15 +111,24 @@ class ProjectService:
         return projects, total
 
     async def update_project(
-        self, project_id: str, update: UpdateProjectRequest
+        self, project_id: str, update: UpdateProjectRequest | dict
     ) -> Optional[Project]:
-        """更新專案"""
+        """更新專案
+
+        Args:
+            project_id: 專案 ID
+            update: 更新內容，可以是 UpdateProjectRequest 或 dict
+        """
         obj_id = validate_and_convert_object_id(project_id, "project_id")
         if not obj_id:
             return None
 
         # 只更新提供的欄位
-        update_dict = update.model_dump(exclude_unset=True)
+        if isinstance(update, dict):
+            # dict 直接使用，允許設置 None 值
+            update_dict = update.copy()
+        else:
+            update_dict = update.model_dump(exclude_unset=True)
         if not update_dict:
             return await self.get_project_by_id(project_id)
 

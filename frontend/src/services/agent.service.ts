@@ -52,10 +52,19 @@ export const stopAgentRunAPI = async (projectId: string, runId: string): Promise
 }
 
 /**
- * 繼續 Agent Run（會建立新的 run）
+ * 繼續 Agent Run（會建立新的 run，但延續同一會話）
  */
 export const resumeAgentRunAPI = async (projectId: string, runId: string): Promise<any> => {
   const response = await api.post(`/api/v1/projects/${projectId}/agent/runs/${runId}/resume`)
+  return response.data
+}
+
+/**
+ * 重設重構會話
+ * 清空 refactor_thread_id，下次開始重構時會建立新的會話
+ */
+export const resetRefactorSessionAPI = async (projectId: string): Promise<any> => {
+  const response = await api.post(`/api/v1/projects/${projectId}/agent/reset-session`)
   return response.data
 }
 

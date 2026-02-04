@@ -14,7 +14,7 @@ async def test_exec_command():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試執行",
+                "spec": "測試執行",
             },
         )
         project_id = create_response.json()["id"]
@@ -45,7 +45,7 @@ async def test_exec_command_with_error():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試錯誤",
+                "spec": "測試錯誤",
             },
         )
         project_id = create_response.json()["id"]
@@ -73,7 +73,7 @@ async def test_exec_without_provision():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試",
+                "spec": "測試",
             },
         )
         project_id = create_response.json()["id"]

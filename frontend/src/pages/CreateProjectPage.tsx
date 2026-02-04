@@ -15,7 +15,7 @@ export default function CreateProjectPage() {
   const [description, setDescription] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
   const [branch, setBranch] = useState('main')
-  const [initPrompt, setInitPrompt] = useState('')
+  const [spec, setSpec] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [urlWarning, setUrlWarning] = useState('')
@@ -71,7 +71,7 @@ export default function CreateProjectPage() {
         project_type: projectType,
         repo_url: projectType === ProjectType.REFACTOR ? repoUrl : undefined,
         branch,
-        init_prompt: initPrompt,
+        spec,
       })
       // Sandbox 專案導向聊天頁面，重構專案導向詳情頁面
       if (projectType === ProjectType.SANDBOX) {
@@ -250,23 +250,23 @@ export default function CreateProjectPage() {
 
               <div>
                 <label className="block text-sm font-medium mb-2 text-gray-200">
-                  {projectType === ProjectType.SANDBOX ? '初始訊息 *' : '初始提示 *'}
+                  {projectType === ProjectType.SANDBOX ? '初始訊息 *' : 'Spec *'}
                 </label>
                 <Textarea
                   placeholder={
                     projectType === ProjectType.SANDBOX
                       ? '描述你想要 AI Agent 做什麼...\n例如：「建立一個簡單的 TODO 應用」'
-                      : '描述你想要 AI 執行的重構任務...'
+                      : '描述你想要 AI 執行的重構任務和規格...'
                   }
-                  value={initPrompt}
-                  onChange={(e) => setInitPrompt(e.target.value)}
+                  value={spec}
+                  onChange={(e) => setSpec(e.target.value)}
                   rows={6}
                   required
                 />
                 <p className="text-xs text-gray-400 mt-1">
                   {projectType === ProjectType.SANDBOX
                     ? '這將作為與 AI Agent 的第一則對話訊息'
-                    : '例如：「重構所有的 API 路由，使用 async/await 語法」'}
+                    : '描述重構目標、期望結果和任何特定規格要求'}
                 </p>
               </div>
 

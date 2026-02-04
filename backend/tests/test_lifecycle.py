@@ -14,7 +14,7 @@ async def test_stop_project():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試停止",
+                "spec": "測試停止",
             },
         )
         project_id = create_response.json()["id"]
@@ -43,7 +43,7 @@ async def test_stop_project_without_provision():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試",
+                "spec": "測試",
             },
         )
         project_id = create_response.json()["id"]
@@ -68,7 +68,7 @@ async def test_delete_project():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試刪除",
+                "spec": "測試刪除",
             },
         )
         project_id = create_response.json()["id"]
@@ -96,7 +96,7 @@ async def test_delete_project_without_provision():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試",
+                "spec": "測試",
             },
         )
         project_id = create_response.json()["id"]

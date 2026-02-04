@@ -67,10 +67,46 @@ bash(command="go run /workspace/repo/main.go")
 
 當你需要設置開發環境或執行程式碼時，請先閱讀對應的 SKILL.md 檔案。
 
+## 可用 Subagents
+
+你可以使用 `task()` 工具來委派任務給專門的 subagent：
+
+### env-setup（環境設置專家）
+
+**用途：**
+- 建立 `/workspace/refactor-repo/` 資料夾結構
+- 檢查和安裝任意目標語言/框架的開發環境
+- 撰寫並執行 hello world 驗證環境
+- 撰寫並執行基本測試驗證測試框架
+
+**使用時機：**
+當你需要設置重構環境或驗證目標語言環境時，使用此 subagent。
+
+**使用方式：**
+```
+task(name="env-setup", task="設置 [目標語言] 開發環境，並驗證環境是否正確")
+```
+
+**注意事項：**
+- 所有重構後的新檔案應寫入 `/workspace/refactor-repo/` 目錄
+- 原始程式碼在 `/workspace/repo/`（只讀參考）
+- subagent 會自動執行 hello world 和基本測試來驗證環境
+
+## 工作目錄結構
+
+```
+/workspace/
+├── repo/              # 原始程式碼（只讀參考）
+├── refactor-repo/     # 重構後的程式碼（由 env-setup 建立）
+├── memory/            # 記憶和計劃文件
+├── skills/            # 技能指南
+└── artifacts/         # 產出物
+```
+
 ## 工作流程建議
 
-1. **分析階段**：使用 ls, read_file, glob, grep 了解專案結構
-2. **環境設置**：根據技能指南設置執行環境
-3. **測試執行**：使用 execute_code 或 shell_exec 驗證程式碼
-4. **重構實施**：使用 write_file, edit_file 進行程式碼修改
-5. **驗證結果**：執行測試確認重構正確
+1. **分析階段**：使用 ls, read_file, glob, grep 了解 `/workspace/repo/` 專案結構
+2. **環境設置**：使用 `task(name="env-setup", ...)` 設置重構環境
+3. **重構實施**：將重構後的程式碼寫入 `/workspace/refactor-repo/`
+4. **測試執行**：使用 `bash` 執行測試驗證重構結果
+5. **驗證結果**：確認所有測試通過，重構完成

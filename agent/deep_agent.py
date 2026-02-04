@@ -1,19 +1,23 @@
 """Deep Agent - MVP 版本 (Vertex AI + LangChain)"""
 import logging
 import os
-from typing import Optional, List, Callable
+from typing import Optional, List, Callable, Dict, Any
 
 from deepagents import create_deep_agent
 from agent.models import AnthropicModelProvider
 from agent.prompts import get_system_prompt
 from deepagents.backends import FilesystemBackend
 from agent.chunk_parser import ChunkParser
-from agent.tools.bash import bash
+
+# === 載入並註冊所有 tools 和 subagents ===
+# 這些 import 會觸發 @register_tool 和 register_subagent
+import agent.tools  # noqa: F401
+import agent.subagents  # noqa: F401
+
+# 從 registry 取得
+from agent.registry import get_all_tools, get_all_subagents
 
 logger = logging.getLogger(__name__)
-
-# 預設工具列表
-DEFAULT_TOOLS = [bash]
 
 # 預設技能目錄（相對於 backend root）
 DEFAULT_SKILLS = ["/workspace/skills/"]
@@ -28,6 +32,7 @@ class RefactorAgent:
         postgres_url: Optional[str] = None,
         tools: Optional[List[Callable]] = None,
         skills: Optional[List[str]] = None,
+        subagents: Optional[List[Dict[str, Any]]] = None,
         enable_code_execution: bool = True,
     ):
         """初始化 RefactorAgent
@@ -39,6 +44,7 @@ class RefactorAgent:
             postgres_url: PostgreSQL 連線字串，用於持久化對話狀態
             tools: 額外的自定義工具列表（會與預設工具合併）
             skills: 技能目錄列表（相對於 backend root）
+            subagents: 自定義 subagents 列表（會與預設 subagents 合併）
             enable_code_execution: 是否啟用程式碼執行工具（預設 True）
         """
         self.model = model
@@ -48,15 +54,20 @@ class RefactorAgent:
         self.postgres_url = postgres_url
         self.enable_code_execution = enable_code_execution
         
-        # 設定工具
+        # 設定工具（從 registry 取得）
         self.tools = []
         if enable_code_execution:
-            self.tools.extend(DEFAULT_TOOLS)
+            self.tools.extend(get_all_tools())
         if tools:
             self.tools.extend(tools)
         
         # 設定技能
         self.skills = skills if skills is not None else DEFAULT_SKILLS
+        
+        # 設定 subagents（從 registry 取得）
+        self.subagents = list(get_all_subagents())
+        if subagents:
+            self.subagents.extend(subagents)
         
         self._setup_persistence()
         self._agent_init()
@@ -93,9 +104,14 @@ class RefactorAgent:
         if not self.model:
             raise ValueError("model is not set")
 
-        # 記錄工具和技能配置
+        # 記錄工具、技能和 subagents 配置
         tool_names = [t.__name__ for t in self.tools]
-        logger.info(f"初始化 Agent - 工具: {tool_names}, 技能目錄: {self.skills}")
+        subagent_names = [s["name"] for s in self.subagents]
+        logger.info(
+            f"初始化 Agent - 工具: {tool_names}, "
+            f"技能目錄: {self.skills}, "
+            f"Subagents: {subagent_names}"
+        )
 
         self.agent = create_deep_agent(
             model=self.model,
@@ -104,6 +120,7 @@ class RefactorAgent:
             ],
             tools=self.tools,
             skills=self.skills,
+            subagents=self.subagents,
             backend=FilesystemBackend(
                 root_dir=self.root_dir,
                 virtual_mode=True

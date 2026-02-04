@@ -16,7 +16,7 @@ class CreateProjectRequest(BaseModel):
     )
     repo_url: Optional[str] = Field(None, description="Git repository URL（SANDBOX 類型可不填）")
     branch: str = Field(default="main", description="Git branch")
-    init_prompt: str = Field(..., description="初始提示")
+    spec: str = Field(default="", description="重構規格說明")
 
     @model_validator(mode='after')
     def validate_repo_url(self):
@@ -33,7 +33,7 @@ class CreateProjectRequest(BaseModel):
                 "project_type": "REFACTOR",
                 "repo_url": "https://github.com/user/repo.git",
                 "branch": "main",
-                "init_prompt": "重構專案以提升可維護性",
+                "spec": "重構專案以提升可維護性",
             }
         }
 
@@ -45,7 +45,7 @@ class UpdateProjectRequest(BaseModel):
     description: Optional[str] = None
     repo_url: Optional[str] = None
     branch: Optional[str] = None
-    init_prompt: Optional[str] = None
+    spec: Optional[str] = None
     status: Optional[ProjectStatus] = None
     container_id: Optional[str] = None
 
@@ -59,7 +59,8 @@ class ProjectResponse(BaseModel):
     project_type: ProjectType = Field(..., description="專案類型")
     repo_url: Optional[str] = Field(None, description="Git repository URL")
     branch: str = Field(..., description="Git branch")
-    init_prompt: str = Field(..., description="初始提示")
+    spec: str = Field(default="", description="重構規格說明")
+    refactor_thread_id: Optional[str] = Field(None, description="重構會話 ID")
     status: ProjectStatus = Field(..., description="專案狀態")
     container_id: Optional[str] = Field(None, description="Docker 容器 ID")
     created_at: datetime = Field(..., description="建立時間")
@@ -78,7 +79,8 @@ class ProjectResponse(BaseModel):
                 "project_type": "REFACTOR",
                 "repo_url": "https://github.com/user/repo.git",
                 "branch": "main",
-                "init_prompt": "重構專案以提升可維護性",
+                "spec": "重構專案以提升可維護性",
+                "refactor_thread_id": None,
                 "status": "CREATED",
                 "container_id": None,
                 "created_at": "2024-01-01T00:00:00Z",

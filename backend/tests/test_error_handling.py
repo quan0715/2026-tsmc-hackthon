@@ -14,7 +14,7 @@ async def test_provision_with_invalid_repo():
             json={
                 "repo_url": "https://github.com/invalid/nonexistent-repo-12345.git",
                 "branch": "main",
-                "init_prompt": "測試失敗",
+                "spec": "測試失敗",
             },
         )
         project_id = create_response.json()["id"]
@@ -53,7 +53,7 @@ async def test_provision_with_invalid_branch():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "nonexistent-branch-12345",
-                "init_prompt": "測試失敗",
+                "spec": "測試失敗",
             },
         )
         project_id = create_response.json()["id"]
@@ -91,7 +91,7 @@ async def test_docker_status_consistency():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試狀態一致性",
+                "spec": "測試狀態一致性",
             },
         )
         project_id = create_response.json()["id"]
@@ -126,7 +126,7 @@ async def test_get_project_without_docker_status():
             json={
                 "repo_url": "https://github.com/octocat/Hello-World.git",
                 "branch": "master",
-                "init_prompt": "測試",
+                "spec": "測試",
             },
         )
         project_id = create_response.json()["id"]

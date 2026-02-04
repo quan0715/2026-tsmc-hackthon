@@ -33,7 +33,8 @@ class Project(BaseModel):
     project_type: ProjectType = ProjectType.REFACTOR  # 專案類型
     repo_url: Optional[str] = None  # Git repository URL（SANDBOX 類型可為空）
     branch: str = "main"  # Git branch
-    init_prompt: str  # 初始提示
+    spec: str = ""  # 重構規格說明（原 init_prompt）
+    refactor_thread_id: Optional[str] = None  # 重構會話 ID
     status: ProjectStatus = ProjectStatus.CREATED  # 專案狀態
     container_id: Optional[str] = None  # Docker 容器 ID
     owner_id: str  # 擁有者用戶 ID

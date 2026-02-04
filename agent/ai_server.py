@@ -42,8 +42,12 @@ stop_flags: Dict[str, bool] = {}
 # Chat Agent 實例快取（以 thread_id 為 key，支援多輪對話）
 chat_agents: Dict[str, RefactorAgent] = {}
 
+# Refactor Agent 實例快取（以 thread_id 為 key，支援會話持久化）
+refactor_agents: Dict[str, RefactorAgent] = {}
+
 class RunRequest(BaseModel):
-    init_prompt: str
+    spec: str  # 重構規格說明（原 init_prompt）
+    thread_id: Optional[str] = None  # 會話 ID（用於持久化）
     verbose: bool = True
 
 class CloneRequest(BaseModel):
@@ -86,8 +90,14 @@ def log_task(task_id: str, message: str):
     logger.info(f"[{task_id}] {message}")
 
 
-def execute_agent(task_id: str, init_prompt: str, verbose: bool):
-    """背景執行 Agent（在 BackgroundTasks 中執行）"""
+def execute_agent(task_id: str, spec: str, thread_id: str, verbose: bool):
+    """背景執行 Agent（在 BackgroundTasks 中執行）
+
+    支援會話持久化：
+    - 使用 thread_id 來維持對話上下文
+    - 相同 thread_id 的執行會延續之前的對話歷史
+    - 對話狀態會透過 PostgreSQL 持久化（如果配置了 POSTGRES_URL）
+    """
     try:
         # 初始化日誌和停止標誌
         task_logs[task_id] = []
@@ -97,8 +107,8 @@ def execute_agent(task_id: str, init_prompt: str, verbose: bool):
         tasks[task_id]["status"] = TaskStatus.RUNNING
         tasks[task_id]["started_at"] = datetime.utcnow().isoformat()
 
-        print(f"🚀 [DEBUG] Task {task_id}: 開始執行", flush=True)
-        log_task(task_id, "🚀 開始執行 Agent")
+        print(f"🚀 [DEBUG] Task {task_id}: 開始執行 (thread: {thread_id})", flush=True)
+        log_task(task_id, f"🚀 開始執行 Agent (thread: {thread_id})")
 
         # 檢查停止標誌
         if stop_flags.get(task_id, False):
@@ -107,37 +117,47 @@ def execute_agent(task_id: str, init_prompt: str, verbose: bool):
             tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
             return
 
-        # 初始化 LLM
-        print(f"🔧 [DEBUG] Task {task_id}: 初始化 LLM", flush=True)
-        log_task(task_id, "🔧 初始化 LLM...")
-        provider = AnthropicModelProvider()
-        model = provider.get_model()
-        print(f"✅ [DEBUG] Task {task_id}: LLM 初始化完成", flush=True)
-        log_task(task_id, "✅ LLM 初始化完成")
+        # 獲取 PostgreSQL URL
+        postgres_url = os.environ.get("POSTGRES_URL")
+        if postgres_url:
+            log_task(task_id, "🔗 使用 PostgreSQL 持久化")
+        else:
+            log_task(task_id, "📝 使用內存模式（對話不會持久化）")
 
-        # 再次檢查停止標誌
-        if stop_flags.get(task_id, False):
-            log_task(task_id, "⏹️  任務在 LLM 初始化後被停止")
-            tasks[task_id]["status"] = TaskStatus.STOPPED
-            tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
-            return
+        # 獲取或建立 Agent（複用同一 thread 的 agent）
+        if thread_id not in refactor_agents:
+            print(f"🔧 [DEBUG] Task {task_id}: 初始化 LLM", flush=True)
+            log_task(task_id, "🔧 初始化 LLM...")
+            provider = AnthropicModelProvider()
+            model = provider.get_model()
+            print(f"✅ [DEBUG] Task {task_id}: LLM 初始化完成", flush=True)
+            log_task(task_id, "✅ LLM 初始化完成")
 
-        # 建立並執行 RefactorAgent
-        print(f"🤖 [DEBUG] Task {task_id}: 建立 RefactorAgent", flush=True)
-        log_task(task_id, "🤖 建立 RefactorAgent...")
+            # 再次檢查停止標誌
+            if stop_flags.get(task_id, False):
+                log_task(task_id, "⏹️  任務在 LLM 初始化後被停止")
+                tasks[task_id]["status"] = TaskStatus.STOPPED
+                tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
+                return
 
-        # 定義停止檢查回調
-        def should_stop():
-            """檢查是否應該停止執行"""
-            return stop_flags.get(task_id, False)
+            # 建立 RefactorAgent
+            print(f"🤖 [DEBUG] Task {task_id}: 建立 RefactorAgent", flush=True)
+            log_task(task_id, "🤖 建立 RefactorAgent...")
 
-        agent = RefactorAgent(
-            model=model,
-            verbose=verbose,
-            stop_check_callback=should_stop
-        )
-        print(f"✅ [DEBUG] Task {task_id}: RefactorAgent 建立完成", flush=True)
-        log_task(task_id, "✅ RefactorAgent 建立完成")
+            refactor_agents[thread_id] = RefactorAgent(
+                model=model,
+                verbose=verbose,
+                postgres_url=postgres_url,
+                stop_check_callback=lambda: stop_flags.get(task_id, False)
+            )
+            print(f"✅ [DEBUG] Task {task_id}: RefactorAgent 建立完成", flush=True)
+            log_task(task_id, "✅ RefactorAgent 建立完成")
+        else:
+            log_task(task_id, "♻️  複用現有 RefactorAgent（延續對話）")
+            # 更新停止檢查回調
+            refactor_agents[thread_id].stop_check_callback = lambda: stop_flags.get(task_id, False)
+
+        agent = refactor_agents[thread_id]
 
         # 定義事件回調函數，將 chunk 事件轉發到日誌
         # 並在每次回調時檢查停止標誌
@@ -158,14 +178,14 @@ def execute_agent(task_id: str, init_prompt: str, verbose: bool):
             log_task(task_id, f"[{event_type}] {json.dumps(data, ensure_ascii=False, default=str)}")
 
         print(f"▶️  [DEBUG] Task {task_id}: 開始執行 Agent", flush=True)
-        log_task(task_id, f"▶️  執行 Agent，init_prompt: {init_prompt[:100]}...")
+        log_task(task_id, f"▶️  執行 Agent，spec: {spec[:100]}...")
 
         # 執行 Agent（可能會被 KeyboardInterrupt 中斷）
-        # 使用 task_id 作為 thread_id，確保 checkpointer 能正常運作
+        # 使用 thread_id 來維持對話上下文
         agent.run(
-            user_message=init_prompt,
+            user_message=spec,
             event_callback=handle_chunk_event,
-            thread_id=f"refactor-{task_id}"
+            thread_id=thread_id
         )
 
         # 檢查是否被停止
@@ -345,19 +365,27 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
 
 @app.post("/run", response_model=RunResponse)
 async def run_agent(request: RunRequest, background_tasks: BackgroundTasks):
-    """啟動 Agent 執行（異步模式）
+    """啟動 Agent 執行（異步模式，支援會話持久化）
 
     立即返回 task_id，Agent 在背景執行。
     使用 GET /tasks/{task_id} 查詢執行狀態。
+
+    會話持久化：
+    - 若提供 thread_id，則延續之前的對話
+    - 若未提供 thread_id，則建立新的會話
     """
     # 生成唯一 task_id
     task_id = str(uuid.uuid4())
 
+    # 使用提供的 thread_id 或生成新的
+    thread_id = request.thread_id or f"refactor-{task_id}"
+
     # 建立任務記錄
     tasks[task_id] = {
         "task_id": task_id,
+        "thread_id": thread_id,
         "status": TaskStatus.PENDING,
-        "init_prompt": request.init_prompt,
+        "spec": request.spec,
         "created_at": datetime.utcnow().isoformat(),
         "started_at": None,
         "finished_at": None,
@@ -368,11 +396,12 @@ async def run_agent(request: RunRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(
         execute_agent,
         task_id=task_id,
-        init_prompt=request.init_prompt,
+        spec=request.spec,
+        thread_id=thread_id,
         verbose=request.verbose
     )
 
-    logger.info(f"[{task_id}] 任務已建立，開始背景執行")
+    logger.info(f"[{task_id}] 任務已建立 (thread: {thread_id})，開始背景執行")
 
     return RunResponse(
         task_id=task_id,
@@ -527,7 +556,8 @@ async def stop_task(task_id: str):
 async def resume_task(task_id: str, background_tasks: BackgroundTasks):
     """繼續執行已停止的任務
 
-    實際上會使用原始的 init_prompt 重新啟動一個新的任務。
+    使用原始的 thread_id 延續對話，並使用原始 spec 重新發送。
+    注意：後端 API 通常會傳送新的 spec，所以這個端點主要用於測試。
     """
     if task_id not in tasks:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -541,14 +571,16 @@ async def resume_task(task_id: str, background_tasks: BackgroundTasks):
             detail=f"Cannot resume task with status: {old_task['status']}"
         )
 
-    # 使用原始 init_prompt 建立新任務
+    # 使用原始 thread_id 和 spec 建立新任務
     new_task_id = str(uuid.uuid4())
-    init_prompt = old_task["init_prompt"]
+    spec = old_task.get("spec", old_task.get("init_prompt", ""))  # 兼容舊格式
+    thread_id = old_task.get("thread_id", f"refactor-{task_id}")
 
     tasks[new_task_id] = {
         "task_id": new_task_id,
+        "thread_id": thread_id,
         "status": TaskStatus.PENDING,
-        "init_prompt": init_prompt,
+        "spec": spec,
         "created_at": datetime.utcnow().isoformat(),
         "started_at": None,
         "finished_at": None,
@@ -560,16 +592,18 @@ async def resume_task(task_id: str, background_tasks: BackgroundTasks):
     background_tasks.add_task(
         execute_agent,
         task_id=new_task_id,
-        init_prompt=init_prompt,
+        spec=spec,
+        thread_id=thread_id,
         verbose=True
     )
 
-    logger.info(f"[{new_task_id}] Task resumed from [{task_id}]")
-    log_task(new_task_id, f"▶️  從任務 {task_id} 恢復執行")
+    logger.info(f"[{new_task_id}] Task resumed from [{task_id}] (thread: {thread_id})")
+    log_task(new_task_id, f"▶️  從任務 {task_id} 恢復執行 (thread: {thread_id})")
 
     return {
         "task_id": new_task_id,
         "old_task_id": task_id,
+        "thread_id": thread_id,
         "status": TaskStatus.PENDING,
         "message": "Task resumed with new task_id"
     }
