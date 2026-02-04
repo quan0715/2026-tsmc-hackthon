@@ -19,6 +19,15 @@ from agent.registry import get_all_tools, get_all_subagents
 
 logger = logging.getLogger(__name__)
 
+from langchain.agents.middleware import SummarizationMiddleware
+# 🔑 P1: LangGraph Checkpointing 支持
+try:
+    from langgraph.checkpoint.sqlite import SqliteSaver
+    CHECKPOINTING_AVAILABLE = True
+except ImportError:
+    CHECKPOINTING_AVAILABLE = False
+    logger.warning("langgraph.checkpoint.sqlite 不可用，checkpointing 功能將被禁用")
+
 # 預設技能目錄（相對於 backend root）
 DEFAULT_SKILLS = ["/workspace/skills/"]
 
@@ -34,6 +43,8 @@ class RefactorAgent:
         skills: Optional[List[str]] = None,
         subagents: Optional[List[Dict[str, Any]]] = None,
         enable_code_execution: bool = True,
+        enable_checkpointing: bool = False,
+        checkpoint_db: Optional[str] = None,
     ):
         """初始化 RefactorAgent
 
@@ -53,6 +64,7 @@ class RefactorAgent:
         self.stop_check_callback = stop_check_callback
         self.postgres_url = postgres_url
         self.enable_code_execution = enable_code_execution
+        self.enable_checkpointing = enable_checkpointing
         
         # 設定工具（從 registry 取得）
         self.tools = []
@@ -68,6 +80,17 @@ class RefactorAgent:
         self.subagents = list(get_all_subagents())
         if subagents:
             self.subagents.extend(subagents)
+        
+        # 初始化 Checkpointer
+        self.checkpointer = None
+        if enable_checkpointing and CHECKPOINTING_AVAILABLE:
+            db_path = checkpoint_db or f"{self.root_dir}/memory/checkpoints.db"
+            try:
+                self.checkpointer = SqliteSaver.from_conn_string(db_path)
+                logger.info(f"✅ Checkpointing 已啟用，資料庫：{db_path}")
+            except Exception as e:
+                logger.error(f"❌ 無法初始化 Checkpointer: {e}")
+                self.checkpointer = None
         
         self._setup_persistence()
         self._agent_init()
@@ -110,8 +133,15 @@ class RefactorAgent:
         logger.info(
             f"初始化 Agent - 工具: {tool_names}, "
             f"技能目錄: {self.skills}, "
-            f"Subagents: {subagent_names}"
+            f"Subagents: {subagent_names}, "
+            f"Checkpointing: {'啟用' if self.enable_checkpointing else '禁用'}"
         )
+
+        # 準備 middleware 列表
+        middleware = []
+        if self.enable_checkpointing:
+            # SummarizationMiddleware 需要 model 參數
+            middleware.append(SummarizationMiddleware(model=self.model))
 
         self.agent = create_deep_agent(
             model=self.model,
@@ -128,6 +158,7 @@ class RefactorAgent:
             system_prompt=get_system_prompt("default"),
             checkpointer=self.checkpointer,
             store=self.store,
+            middleware=middleware,
         )
 
     def run(
