@@ -1,0 +1,19 @@
+# ===========================
+# 此檔案已棄用
+# ===========================
+# Agent 依賴已移至 agent/requirements.txt
+# 保留此檔案僅作為歷史參考
+#
+# 新的 Agent 依賴檔案位置:
+# - agent/requirements.txt
+# ===========================
+
+# LangChain Deep Agents 核心
+deepagents>=0.3.0
+langchain-anthropic>=0.2.0
+
+# MongoDB 客戶端
+pymongo>=4.13.0
+
+# 工具庫
+python-dotenv==1.0.0

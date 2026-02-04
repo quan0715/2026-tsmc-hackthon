@@ -1,0 +1,33 @@
+# 前端 Dockerfile - 生產環境（Multi-stage build）
+
+# Stage 1: 構建階段
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# 複製 package.json 和 package-lock.json
+COPY frontend/package*.json ./
+
+# 安裝依賴
+RUN npm ci --only=production
+
+# 複製前端代碼
+COPY frontend/ .
+
+# 構建生產版本
+RUN npm run build
+
+# Stage 2: 運行階段（使用 Nginx 提供靜態檔案）
+FROM nginx:alpine
+
+# 複製構建產物到 Nginx 預設目錄
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# 複製自定義 Nginx 配置
+COPY devops/frontend/nginx.conf /etc/nginx/conf.d/default.conf
+
+# 暴露端口
+EXPOSE 80
+
+# 啟動 Nginx
+CMD ["nginx", "-g", "daemon off;"]

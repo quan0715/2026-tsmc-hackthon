@@ -1,0 +1,32 @@
+# Service Account Keys (敏感資訊，絕不 commit)
+*.json
+!package.json
+!tsconfig.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Artifacts
+artifacts/
+test-repo/
+
+# Logs
+*.log
+logs/

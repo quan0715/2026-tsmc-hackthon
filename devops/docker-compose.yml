@@ -1,0 +1,93 @@
+services:
+  # PostgreSQL for LangGraph persistence
+  postgres:
+    image: postgres:16
+    container_name: refactor-postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: langgraph
+      POSTGRES_PASSWORD: langgraph_secret
+      POSTGRES_DB: langgraph
+    networks:
+      - refactor-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langgraph"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # MongoDB 資料庫
+  mongodb:
+    image: mongo:7
+    container_name: refactor-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: refactor_agent
+    networks:
+      - refactor-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI 後端服務
+  api:
+    build:
+      context: ..
+      dockerfile: devops/api/Dockerfile
+    container_name: refactor-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../backend:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/refactor-workspaces:/tmp/refactor-workspaces
+    env_file:
+      - ../backend/.env
+    environment:
+      - MONGODB_URL=mongodb://mongodb:27017
+      - MONGODB_DATABASE=refactor_agent
+      - POSTGRES_URL=postgresql://langgraph:langgraph_secret@postgres:5432/langgraph
+      - DEBUG=true
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - refactor-network
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # React 前端服務
+  frontend:
+    build:
+      context: ..
+      dockerfile: devops/frontend/Dockerfile
+    container_name: refactor-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules # 避免覆蓋 node_modules
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8000
+    depends_on:
+      - api
+    networks:
+      - refactor-network
+
+volumes:
+  mongodb_data:
+  postgres_data:
+
+networks:
+  refactor-network:
+    name: refactor-network
+    driver: bridge
