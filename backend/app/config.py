@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     mongodb_url: str = "mongodb://localhost:27017"
     mongodb_database: str = "refactor_agent"
 
+    # PostgreSQL 設定（LangGraph 持久化，可選）
+    postgres_url: Optional[str] = None
+
     # Docker 設定
     docker_base_image: str = "refactor-base:latest"
     docker_network: str = "refactor-network"
