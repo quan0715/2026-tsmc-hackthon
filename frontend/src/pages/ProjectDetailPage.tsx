@@ -9,14 +9,13 @@ import {
 } from '@/services/project.service'
 import {
   getAgentRunsAPI,
-  startAgentRunAPI,
   stopAgentRunAPI,
   resetRefactorSessionAPI,
 } from '@/services/agent.service'
 import { getFileTreeAPI, getFileContentAPI } from '@/services/file.service'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { AgentLogStream } from '@/components/agent/AgentLogStream'
+import { ChatPanel } from '@/components/chat/ChatPanel'
 import { TaskList, type Task } from '@/components/agent/TaskList'
 import { FileTree } from '@/components/file/FileTree'
 import { FileViewer } from '@/components/file/FileViewer'
@@ -26,7 +25,6 @@ import { AgentRunStatus } from '@/types/agent.types'
 import type { AgentRunDetail } from '@/types/agent.types'
 import type { FileTreeNode, OpenFile } from '@/types/file.types'
 import {
-  Play,
   Square,
   Settings,
   ArrowLeft,
@@ -62,7 +60,6 @@ export default function ProjectDetailPage() {
 
   // UI state
   const [showSettings, setShowSettings] = useState(false)
-  const [isStarting, setIsStarting] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
   const [isProvisioning, setIsProvisioning] = useState(false)
 
@@ -214,20 +211,6 @@ export default function ProjectDetailPage() {
     }
   }
 
-  const handleStartAgent = async () => {
-    if (!id) return
-    setIsStarting(true)
-    try {
-      await startAgentRunAPI(id)
-      await loadRuns()
-      await loadProject()
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to start')
-    } finally {
-      setIsStarting(false)
-    }
-  }
-
   const handleStopAgent = async () => {
     if (!id || !currentRun) return
     if (!confirm('確定要停止重構嗎？')) return
@@ -297,7 +280,6 @@ export default function ProjectDetailPage() {
 
   const projectName = project.title || project.repo_url?.split('/').pop()?.replace('.git', '') || 'Project'
   const isRunning = currentRun?.status === 'RUNNING'
-  const canStart = project.status === 'READY' && !isRunning
   const needsProvision = project.status === 'CREATED' || project.status === 'FAILED'
 
   return (
@@ -380,24 +362,21 @@ export default function ProjectDetailPage() {
 
                 {tasks.length === 0 && <div className="flex-1" />}
 
-                <div className="p-2 space-y-2 border-t border-gray-800">
-                  {needsProvision ? (
-                    <Button className="w-full" size="sm" onClick={handleProvision} disabled={isProvisioning}>
-                      {isProvisioning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-                      Provision
-                    </Button>
-                  ) : isRunning ? (
-                    <Button className="w-full" size="sm" variant="destructive" onClick={handleStopAgent} disabled={isStopping}>
-                      {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Square className="w-4 h-4 mr-1" />}
-                      Stop
-                    </Button>
-                  ) : canStart ? (
-                    <Button className="w-full" size="sm" onClick={handleStartAgent} disabled={isStarting}>
-                      {isStarting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Play className="w-4 h-4 mr-1" />}
-                      Start
-                    </Button>
-                  ) : null}
-                </div>
+                {(needsProvision || isRunning) && (
+                  <div className="p-2 space-y-2 border-t border-gray-800">
+                    {needsProvision ? (
+                      <Button className="w-full" size="sm" onClick={handleProvision} disabled={isProvisioning}>
+                        {isProvisioning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                        Provision
+                      </Button>
+                    ) : isRunning ? (
+                      <Button className="w-full" size="sm" variant="destructive" onClick={handleStopAgent} disabled={isStopping}>
+                        {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Square className="w-4 h-4 mr-1" />}
+                        Stop
+                      </Button>
+                    ) : null}
+                  </div>
+                )}
               </div>
             </Panel>
             <Separator className="w-1 bg-gray-700 hover:bg-purple-600 transition-colors flex items-center justify-center">
@@ -406,25 +385,18 @@ export default function ProjectDetailPage() {
           </>
         )}
 
-        {/* Panel 2: Live Logs */}
-        <Panel id="logs" defaultSize="25%" minSize="10%" maxSize="50%">
+        {/* Panel 2: Chat */}
+        <Panel id="chat" defaultSize="25%" minSize="10%" maxSize="50%">
           <div className="h-full flex flex-col border-r border-gray-800">
             <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800">
-              <span className="text-xs text-gray-500 uppercase">Live Logs</span>
+              <span className="text-xs text-gray-500 uppercase">Chat</span>
             </div>
             <div className="flex-1 overflow-hidden">
-              {currentRun ? (
-                <AgentLogStream
-                  projectId={id!}
-                  runId={currentRun.id}
-                  autoStart={isRunning}
-                  onTasksUpdate={setTasks}
-                />
-              ) : (
-                <div className="h-full flex items-center justify-center text-gray-500 text-sm">
-                  No active run
-                </div>
-              )}
+              <ChatPanel
+                projectId={id!}
+                disabled={project.status !== 'READY'}
+                onTasksUpdate={setTasks}
+              />
             </div>
           </div>
         </Panel>
