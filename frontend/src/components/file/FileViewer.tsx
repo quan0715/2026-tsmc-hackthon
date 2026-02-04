@@ -1,4 +1,5 @@
 import { X, Loader2 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
 import type { OpenFile } from '@/types/file.types'
 
 interface FileViewerProps {
@@ -61,9 +62,15 @@ export function FileViewer({ files, activeFilePath, onTabSelect, onTabClose }: F
             <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
           </div>
         ) : activeFile ? (
-          <pre className="p-4 text-sm font-mono text-gray-300 whitespace-pre overflow-x-auto">
-            <code>{activeFile.content}</code>
-          </pre>
+          activeFile.name.endsWith('.md') ? (
+            <div className="p-4 prose prose-invert prose-sm max-w-none">
+              <ReactMarkdown>{activeFile.content}</ReactMarkdown>
+            </div>
+          ) : (
+            <pre className="p-4 text-sm font-mono text-gray-300 whitespace-pre overflow-x-auto">
+              <code>{activeFile.content}</code>
+            </pre>
+          )
         ) : null}
       </div>
     </div>

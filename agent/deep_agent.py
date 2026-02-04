@@ -127,10 +127,6 @@ class RefactorAgent:
         if not self.model:
             raise ValueError("model is not set")
 
-        # 配置 SummarizationMiddleware
-        if self.enable_checkpointing:
-            self.agent.add_middleware(SummarizationMiddleware())
-
         # 記錄工具、技能和 subagents 配置
         tool_names = [t.__name__ for t in self.tools]
         subagent_names = [s["name"] for s in self.subagents]
@@ -140,6 +136,12 @@ class RefactorAgent:
             f"Subagents: {subagent_names}, "
             f"Checkpointing: {'啟用' if self.enable_checkpointing else '禁用'}"
         )
+
+        # 準備 middleware 列表
+        middleware = []
+        if self.enable_checkpointing:
+            # SummarizationMiddleware 需要 model 參數
+            middleware.append(SummarizationMiddleware(model=self.model))
 
         self.agent = create_deep_agent(
             model=self.model,
@@ -156,7 +158,7 @@ class RefactorAgent:
             system_prompt=get_system_prompt("default"),
             checkpointer=self.checkpointer,
             store=self.store,
-            middleware=[SummarizationMiddleware()],
+            middleware=middleware,
         )
 
     def run(
