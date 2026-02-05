@@ -105,7 +105,8 @@ ANTHROPIC_API_KEY: sk-ant-test-dummy-key-for-ci
    - 檔案: `frontend/Dockerfile.prod`
 
 **推送策略**:
-- **PR / Push**: 僅建置驗證，不推送
+- **PR**: 僅建置驗證，不推送
+- **Push to main**: 建置並推送到 GAR
 - **Manual Dispatch**: 建置並推送到 GAR
 
 ---
@@ -117,8 +118,8 @@ ANTHROPIC_API_KEY: sk-ant-test-dummy-key-for-ci
 git push origin main
 ```
 - ✅ 執行完整 CI 測試
-- ✅ 驗證 Docker 建置
-- ❌ 不推送映像
+- ✅ 建置 Docker 映像
+- ✅ 推送映像到 GAR
 
 ### 2. Pull Request
 ```bash

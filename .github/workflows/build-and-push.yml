@@ -141,17 +141,17 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Setup gcloud
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker auth
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name != 'pull_request'
         run: gcloud auth configure-docker "$REGISTRY_HOST" --quiet
 
       - name: Set image tag
@@ -160,8 +160,8 @@ jobs:
       - name: CI environment check
         run: ./scripts/check-env-ci.sh
 
-      - name: Build base image (build only)
-        if: github.event_name != 'workflow_dispatch'
+      - name: Build base image (build only - PR)
+        if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -170,8 +170,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }}
 
-      - name: Build and push base image (manual only)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Build and push base image
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -181,8 +181,8 @@ jobs:
             ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }}
             ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:latest
 
-      - name: Build API image (build only)
-        if: github.event_name != 'workflow_dispatch'
+      - name: Build API image (build only - PR)
+        if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -191,8 +191,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }}
 
-      - name: Build and push API image (manual only)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Build and push API image
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -202,8 +202,8 @@ jobs:
             ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }}
             ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:latest
 
-      - name: Build frontend image (build only)
-        if: github.event_name != 'workflow_dispatch'
+      - name: Build frontend image (build only - PR)
+        if: github.event_name == 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -214,8 +214,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }}
 
-      - name: Build and push frontend image (manual only)
-        if: github.event_name == 'workflow_dispatch'
+      - name: Build and push frontend image
+        if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -232,8 +232,14 @@ jobs:
           echo "============================================"
           echo "✅ Docker Build Completed Successfully"
           echo "============================================"
+          echo "Event: ${{ github.event_name }}"
           echo "Image Tag: ${{ env.IMAGE_TAG }}"
           echo "Base Image: refactor-base:${{ env.IMAGE_TAG }}"
           echo "API Image: refactor-api:${{ env.IMAGE_TAG }}"
           echo "Frontend Image: refactor-frontend:${{ env.IMAGE_TAG }}"
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "📦 Images pushed to: ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}"
+          else
+            echo "ℹ️  Build only (PR) - Images not pushed"
+          fi
           echo "============================================"
