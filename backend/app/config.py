@@ -1,4 +1,5 @@
 """應用程式配置管理"""
+import os
 import secrets
 import logging
 from pydantic_settings import BaseSettings
@@ -67,8 +68,9 @@ class Settings(BaseSettings):
 # 全域設定實例
 settings = Settings()
 
-# 檢查 JWT secret key 是否使用預設值（警告）
-if settings.jwt_secret_key == _DEFAULT_JWT_SECRET:
+# 檢查 JWT secret key 是否從環境變數設定（警告）
+# 通過檢查環境變數是否存在來判斷，而不是比較值
+if not os.environ.get("JWT_SECRET_KEY"):
     logger.warning(
         "⚠️  JWT_SECRET_KEY 未設定，使用隨機生成的 key。"
         "這會導致每次重啟服務後所有 token 失效。"

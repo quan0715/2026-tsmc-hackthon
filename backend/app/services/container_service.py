@@ -21,14 +21,9 @@ def _sanitize_git_url(url: str) -> str:
     if not url:
         raise ValueError("Git URL 不能為空")
     
-    # 允許的 URL 格式
-    # 1. HTTPS: https://github.com/user/repo.git
-    # 2. SSH: git@github.com:user/repo.git
-    https_pattern = r'^https?://[a-zA-Z0-9\-_.]+(/[a-zA-Z0-9\-_.]+)*/?\.?git?$'
-    ssh_pattern = r'^git@[a-zA-Z0-9\-_.]+:[a-zA-Z0-9\-_.]+(/[a-zA-Z0-9\-_.]+)*\.git$'
-    
-    # 放寬一點的通用 URL 格式（允許子路徑和查詢參數等）
+    # 放寬一點的通用 URL 格式（允許子路徑）
     # 但確保不含危險字元
+    # 支援: https://github.com/user/repo.git, https://github.com/user/repo, git@github.com:user/repo.git
     safe_pattern = r'^(https?://|git@)[a-zA-Z0-9\-_.@:/]+$'
     
     if not re.match(safe_pattern, url):
@@ -79,8 +74,17 @@ def _sanitize_path(path: str, base_path: str = "/workspace") -> str:
     
     # 檢查路徑遍歷（包括 URL 編碼的變體）
     path_lower = path.lower()
-    if '..' in path or '%2e%2e' in path_lower or '%252e' in path_lower:
-        raise ValueError("路徑不能包含 '..'")
+    # 檢查基本的 .. 和各種編碼形式
+    traversal_patterns = [
+        '..',           # 基本形式
+        '%2e%2e',       # URL 編碼
+        '%252e%252e',   # 雙重 URL 編碼
+        '%2f',          # URL 編碼的 /
+        '%252f',        # 雙重 URL 編碼的 /
+    ]
+    for pattern in traversal_patterns:
+        if pattern in path_lower:
+            raise ValueError("路徑不能包含 '..'")
     
     # 不允許 shell 特殊字元
     dangerous_chars = [';', '&', '|', '$', '`', '(', ')', '{', '}', '<', '>', '!', '\n', '\r', "'", '"']

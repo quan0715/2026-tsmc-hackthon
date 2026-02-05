@@ -44,9 +44,11 @@ app = FastAPI(
 
 # CORS 設定
 # 從環境變數讀取允許的來源，生產環境應設定具體域名
-cors_origins = os.environ.get("CORS_ORIGINS", "").split(",")
+cors_origins_str = os.environ.get("CORS_ORIGINS", "")
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+
 # 如果未設定，開發模式允許所有來源，生產模式僅允許本地
-if not cors_origins or cors_origins == [""]:
+if not cors_origins:
     if settings.debug:
         cors_origins = ["*"]
     else:
