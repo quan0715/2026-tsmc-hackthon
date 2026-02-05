@@ -60,7 +60,7 @@ class RefactorAgent:
         """
         self.model = model
         self.verbose = verbose
-        self.root_dir = "/workspace/"
+        self.root_dir = "/"
         self.stop_check_callback = stop_check_callback
         self.postgres_url = postgres_url
         self.enable_code_execution = enable_code_execution
@@ -155,7 +155,7 @@ class RefactorAgent:
                 root_dir=self.root_dir,
                 virtual_mode=True
             ),
-            system_prompt=get_system_prompt("default"),
+            system_prompt=get_system_prompt("autonomous_v3"),
             checkpointer=self.checkpointer,
             store=self.store,
             middleware=middleware,
