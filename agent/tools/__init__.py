@@ -6,9 +6,15 @@
 
 # Import tools（會自動觸發 @register_tool decorator 註冊）
 from agent.tools.bash import bash
+from agent.tools.context_analysis_tool import analyze_code_context
+from agent.tools.test_gap_analysis_tool import analyze_test_gaps
 
 # 導出所有 tools
-__all__ = ["bash"]
+__all__ = [
+    "bash",
+    "analyze_code_context",
+    "analyze_test_gaps",
+]
 
 
 def load_all_tools():
