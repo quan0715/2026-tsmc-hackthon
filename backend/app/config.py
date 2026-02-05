@@ -1,6 +1,13 @@
 """應用程式配置管理"""
+import secrets
+import logging
 from pydantic_settings import BaseSettings
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# 生成一個安全的隨機 fallback secret（每次啟動時不同）
+_DEFAULT_JWT_SECRET = secrets.token_urlsafe(32)
 
 
 class Settings(BaseSettings):
@@ -36,7 +43,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # JWT 認證設定
-    jwt_secret_key: str = "your-secret-key-change-in-production"
+    # 注意：如果未設定 JWT_SECRET_KEY 環境變數，將使用隨機生成的 key
+    # 這會導致每次重啟服務後所有 token 失效
+    jwt_secret_key: str = _DEFAULT_JWT_SECRET
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_hours: int = 24
 
@@ -57,3 +66,11 @@ class Settings(BaseSettings):
 
 # 全域設定實例
 settings = Settings()
+
+# 檢查 JWT secret key 是否使用預設值（警告）
+if settings.jwt_secret_key == _DEFAULT_JWT_SECRET:
+    logger.warning(
+        "⚠️  JWT_SECRET_KEY 未設定，使用隨機生成的 key。"
+        "這會導致每次重啟服務後所有 token 失效。"
+        "請在生產環境設定 JWT_SECRET_KEY 環境變數。"
+    )
