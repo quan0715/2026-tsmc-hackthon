@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { ChevronRight, ChevronDown, Folder, FolderOpen, File } from 'lucide-react'
+import { useState, memo } from 'react'
+import { ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
+import { FileIcon } from './FileIcon'
 import type { FileTreeNode } from '@/types/file.types'
+import { EmptyState } from '@/components/ui/EmptyState'
 
 interface FileTreeProps {
   tree: FileTreeNode[]
@@ -8,13 +10,11 @@ interface FileTreeProps {
   selectedPath?: string
 }
 
-export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
+export const FileTree = memo(function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
   return (
     <div className="h-full overflow-y-auto p-2 bg-gray-900">
       {tree.length === 0 ? (
-        <div className="text-gray-500 text-xs text-center py-4">
-          No files
-        </div>
+        <EmptyState title="No files" />
       ) : (
         tree.map((node) => (
           <TreeNode
@@ -28,7 +28,7 @@ export function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
       )}
     </div>
   )
-}
+})
 
 interface TreeNodeProps {
   node: FileTreeNode
@@ -98,49 +98,4 @@ function TreeNode({ node, depth, onFileSelect, selectedPath }: TreeNodeProps) {
       )}
     </div>
   )
-}
-
-function FileIcon({ filename }: { filename: string }) {
-  const ext = filename.split('.').pop()?.toLowerCase()
-  
-  // 根據副檔名決定顏色
-  let colorClass = 'text-gray-400'
-  
-  switch (ext) {
-    case 'ts':
-    case 'tsx':
-      colorClass = 'text-blue-400'
-      break
-    case 'js':
-    case 'jsx':
-      colorClass = 'text-yellow-400'
-      break
-    case 'py':
-      colorClass = 'text-green-400'
-      break
-    case 'go':
-      colorClass = 'text-cyan-400'
-      break
-    case 'rs':
-      colorClass = 'text-orange-400'
-      break
-    case 'java':
-      colorClass = 'text-red-400'
-      break
-    case 'json':
-      colorClass = 'text-yellow-300'
-      break
-    case 'md':
-      colorClass = 'text-blue-300'
-      break
-    case 'css':
-    case 'scss':
-      colorClass = 'text-pink-400'
-      break
-    case 'html':
-      colorClass = 'text-orange-300'
-      break
-  }
-  
-  return <File className={`w-4 h-4 ${colorClass} flex-shrink-0`} />
 }

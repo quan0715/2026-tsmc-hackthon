@@ -1,4 +1,11 @@
-import { useState, useRef, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import {
   sendChatMessageAPI,
   streamChatResponseAPI,
@@ -6,28 +13,109 @@ import {
 } from "@/services/chat.service";
 import type { ChatMessage, ChatStreamEvent } from "@/types/chat.types";
 import type { Task } from "@/components/agent/TaskList";
-import { Bot, User, Wrench, Terminal, Send, Square, Loader2 } from "lucide-react";
+import { Bot, User, Wrench, Square, Loader2, ArrowUp } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { apiErrorMessage } from "@/utils/apiError";
 
 interface Props {
   projectId: string;
+  threadId: string | null;
+  messages: ChatMessage[];
+  onThreadIdChange: Dispatch<SetStateAction<string | null>>;
+  onMessagesChange: Dispatch<SetStateAction<ChatMessage[]>>;
   disabled?: boolean;
   onTasksUpdate?: (tasks: Task[]) => void;
+  onStreamingChange?: (isStreaming: boolean) => void;
+  loadingHistory?: boolean;
 }
 
-export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+export function ChatPanel({
+  projectId,
+  threadId,
+  messages,
+  onThreadIdChange,
+  onMessagesChange,
+  disabled = false,
+  onTasksUpdate,
+  onStreamingChange,
+  loadingHistory = false,
+}: Props) {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [streamHint, setStreamHint] = useState<string | null>(null);
+  const [streamStart, setStreamStart] = useState<number | null>(null);
+  const [elapsedText, setElapsedText] = useState<string>("0s");
+  const [tokenUsage, setTokenUsage] = useState<{
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+  } | null>(null);
   const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cancelStreamRef = useRef<(() => void) | null>(null);
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    onStreamingChange?.(isStreaming);
+  }, [isStreaming, onStreamingChange]);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      setStreamHint(null);
+      setStreamStart(null);
+      setElapsedText("0s");
+      setTokenUsage(null);
+      return;
+    }
+    if (!streamHint) {
+      const hints = [
+        "Finagling...",
+        "Reticulating splines...",
+        "Tuning the prompt...",
+        "Coaxing better answers...",
+        "Herding tokens...",
+        "Aligning context windows...",
+        "Negotiating with entropy...",
+        "Refactoring the thought chain...",
+      ];
+      const pick = hints[Math.floor(Math.random() * hints.length)];
+      setStreamHint(pick);
+    }
+  }, [isStreaming, streamHint]);
+
+  useEffect(() => {
+    if (!isStreaming) return;
+    if (!streamStart) {
+      setStreamStart(Date.now());
+      return;
+    }
+    const interval = setInterval(() => {
+      const diff = Math.max(0, Math.floor((Date.now() - streamStart) / 1000));
+      const m = Math.floor(diff / 60);
+      const s = diff % 60;
+      setElapsedText(m > 0 ? `${m}m ${s}s` : `${s}s`);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isStreaming, streamStart]);
+
+  // Auto-resize textarea
+  const adjustTextareaHeight = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = Math.min(textarea.scrollHeight, 200) + "px";
+    }
+  }, []);
+
+  useEffect(() => {
+    adjustTextareaHeight();
+  }, [input, adjustTextareaHeight]);
 
   const sendMessage = async () => {
     if (!input.trim() || isStreaming || disabled) return;
@@ -39,9 +127,11 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
       timestamp: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    onMessagesChange((prev) => [...prev, userMessage]);
     setInput("");
     setIsStreaming(true);
+    setStreamStart(Date.now());
+    setTokenUsage(null);
 
     const assistantMessageId = `assistant-${Date.now()}`;
     const assistantMessage: ChatMessage = {
@@ -50,7 +140,7 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
       content: "",
       timestamp: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, assistantMessage]);
+    onMessagesChange((prev) => [...prev, assistantMessage]);
 
     try {
       const response = await sendChatMessageAPI(
@@ -59,7 +149,7 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
         threadId || undefined
       );
       setCurrentTaskId(response.task_id);
-      setThreadId(response.thread_id);
+      onThreadIdChange(response.thread_id);
 
       const cancelFn = await streamChatResponseAPI(
         projectId,
@@ -75,11 +165,11 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
       cancelStreamRef.current = cancelFn;
     } catch (error: unknown) {
       console.error("Failed to send message:", error);
-      const err = error as { response?: { data?: { detail?: string } } };
-      setMessages((prev) =>
+      const errorMessage = apiErrorMessage(error, "Failed to send");
+      onMessagesChange((prev) =>
         prev.map((msg) =>
           msg.id === assistantMessageId
-            ? { ...msg, content: `Error: ${err.response?.data?.detail || "Failed to send"}` }
+            ? { ...msg, content: `Error: ${errorMessage}` }
             : msg
         )
       );
@@ -92,7 +182,7 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
       case "text_delta":
         if (event.content && typeof event.content === "object" && "delta" in event.content) {
           const delta = (event.content as { delta?: string }).delta || "";
-          setMessages((prev) =>
+          onMessagesChange((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId ? { ...msg, content: msg.content + delta } : msg
             )
@@ -103,7 +193,7 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
       case "ai_content":
         if (event.content && typeof event.content === "object" && "content" in event.content) {
           const content = (event.content as { content?: string }).content || "";
-          setMessages((prev) =>
+          onMessagesChange((prev) =>
             prev.map((msg) =>
               msg.id === assistantMessageId ? { ...msg, content: msg.content + content } : msg
             )
@@ -121,7 +211,7 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
             toolName: (event.content as { name?: string }).name,
             toolInput: event.content as Record<string, unknown>,
           };
-          setMessages((prev) => [...prev, toolMessage]);
+          onMessagesChange((prev) => [...prev, toolMessage]);
         }
         break;
 
@@ -141,13 +231,13 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
             toolCallId: tool.id,
             toolInput: tool.args,
           }));
-          setMessages((prev) => [...prev, ...toolMessages]);
+          onMessagesChange((prev) => [...prev, ...toolMessages]);
         }
         break;
 
       case "tool_call_result":
         if (event.content) {
-          setMessages((prev) => {
+          onMessagesChange((prev) => {
             const lastToolIdx = prev.findLastIndex((m) => m.role === "tool");
             if (lastToolIdx >= 0) {
               const newMessages = [...prev];
@@ -169,7 +259,7 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
               results: Array<{ name: string; tool_call_id: string; content: string }>;
             }
           ).results;
-          setMessages((prev) => {
+          onMessagesChange((prev) => {
             const newMessages = [...prev];
             for (const result of results) {
               const toolIdx = newMessages.findIndex(
@@ -226,6 +316,16 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
         }
         break;
 
+      case "token_usage":
+        if (event.content && typeof event.content === "object") {
+          setTokenUsage(event.content as {
+            input_tokens?: number;
+            output_tokens?: number;
+            total_tokens?: number;
+          });
+        }
+        break;
+
       case "log":
         if (event.message) {
           const match = event.message.match(/\[text_delta\]\s*(.+)/);
@@ -233,7 +333,7 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
             try {
               const data = JSON.parse(match[1]);
               if (data.delta) {
-                setMessages((prev) =>
+                onMessagesChange((prev) =>
                   prev.map((msg) =>
                     msg.id === assistantMessageId
                       ? { ...msg, content: msg.content + data.delta }
@@ -280,11 +380,14 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
     <div className="h-full flex flex-col bg-gray-900">
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500 text-sm">
-            <Bot className="w-10 h-10 mb-3 opacity-50" />
-            <p>Start a conversation</p>
+        {loadingHistory && (
+          <div className="flex items-center gap-2 text-xs text-gray-500">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            Loading history...
           </div>
+        )}
+        {!loadingHistory && messages.length === 0 ? (
+          <EmptyState title="Start a conversation" icon={<Bot className="w-10 h-10" />} />
         ) : (
           messages.map((msg) => <MessageEntry key={msg.id} message={msg} isStreaming={isStreaming} />)
         )}
@@ -292,21 +395,25 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
       </div>
 
       {/* Input */}
-      <div className="border-t border-gray-800 p-2">
-        <div className="flex gap-2">
+      <div className="p-2">
+        <div className="flex items-end gap-2 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-gray-600 transition-colors">
+          {/* Textarea */}
           <textarea
+            ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Project not ready..." : "Type a message..."}
+            placeholder={disabled ? "Project not ready..." : "Message..."}
             disabled={isStreaming || disabled}
-            className="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-100 placeholder-gray-500 resize-none focus:outline-none focus:border-purple-500 min-h-[40px] max-h-[120px]"
+            className="flex-1 bg-transparent px-3 py-2.5 text-sm text-gray-100 placeholder-gray-500 resize-none focus:outline-none min-h-[24px] max-h-[200px] leading-relaxed"
             rows={1}
           />
+
+          {/* Send/Stop Button */}
           {isStreaming ? (
             <button
               onClick={stopChat}
-              className="px-3 bg-red-600 hover:bg-red-700 rounded text-white flex items-center justify-center"
+              className="flex-shrink-0 w-8 h-8 mr-1.5 mb-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white flex items-center justify-center transition-colors"
             >
               <Square className="w-4 h-4" />
             </button>
@@ -314,15 +421,34 @@ export function ChatPanel({ projectId, disabled = false, onTasksUpdate }: Props)
             <button
               onClick={sendMessage}
               disabled={!input.trim() || disabled}
-              className="px-3 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-700 disabled:cursor-not-allowed rounded text-white flex items-center justify-center"
+              className="flex-shrink-0 w-8 h-8 mr-1.5 mb-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 text-white disabled:text-gray-500 flex items-center justify-center transition-colors disabled:cursor-not-allowed"
             >
-              <Send className="w-4 h-4" />
+              <ArrowUp className="w-4 h-4" />
             </button>
           )}
         </div>
+        {isStreaming && streamHint && (
+          <div className="px-2 pt-2 text-[11px] text-gray-500">
+            {streamHint} ({elapsedText} · {formatTokens(tokenUsage)} tokens)
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function formatTokens(
+  usage: { input_tokens?: number; output_tokens?: number; total_tokens?: number } | null
+) {
+  if (!usage) return "--";
+  const total =
+    usage.total_tokens ??
+    (usage.input_tokens || 0) + (usage.output_tokens || 0);
+  if (!total) return "--";
+  if (total >= 1000) {
+    return `${(total / 1000).toFixed(1)}k`;
+  }
+  return `${total}`;
 }
 
 function MessageEntry({ message, isStreaming }: { message: ChatMessage; isStreaming: boolean }) {
@@ -342,18 +468,41 @@ function MessageEntry({ message, isStreaming }: { message: ChatMessage; isStream
 
   // Tool message
   if (role === "tool") {
+    const subagentType =
+      toolInput && typeof toolInput === "object"
+        ? (toolInput as { subagent_type?: string }).subagent_type
+        : undefined;
+    const subagentDescription =
+      toolInput && typeof toolInput === "object"
+        ? (toolInput as { description?: string }).description
+        : undefined;
+    const displayName = subagentType ? `Subagent: ${subagentType}` : toolName || "Tool";
+    const displayMeta = subagentType && toolName ? `tool: ${toolName}` : undefined;
+    const displayArgs =
+      toolInput && typeof toolInput === "object"
+        ? Object.fromEntries(
+            Object.entries(toolInput).filter(
+              ([key]) => key !== "subagent_type" && key !== "description"
+            )
+          )
+        : toolInput;
+
     return (
       <div className="flex gap-2">
         <Wrench className="w-4 h-4 text-blue-400 mt-1 flex-shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="text-sm text-blue-400 font-mono">{toolName}</div>
-          {toolInput && Object.keys(toolInput).length > 0 && (
+          <div className="text-sm text-blue-400 font-mono">{displayName}</div>
+          {displayMeta && <div className="text-[10px] text-gray-500">{displayMeta}</div>}
+          {subagentDescription && (
+            <div className="text-xs text-gray-500 mt-1">{subagentDescription}</div>
+          )}
+          {displayArgs && Object.keys(displayArgs).length > 0 && (
             <details className="mt-1">
               <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-400">
                 Args
               </summary>
               <pre className="text-xs text-gray-400 mt-1 overflow-x-auto">
-                {JSON.stringify(toolInput, null, 2)}
+                {JSON.stringify(displayArgs, null, 2)}
               </pre>
             </details>
           )}

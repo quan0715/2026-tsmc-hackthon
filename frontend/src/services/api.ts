@@ -26,7 +26,10 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    // 只有非登入 API 的 401 錯誤才自動登出
+    // 登入 API 返回 401 是預期行為（密碼錯誤）
+    const isLoginRequest = error.config?.url?.includes('/auth/login')
+    if (error.response?.status === 401 && !isLoginRequest) {
       removeToken()
       window.location.href = '/login'
     }

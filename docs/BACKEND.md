@@ -840,6 +840,9 @@ except httpx.HTTPError as e:
 MONGODB_URL=mongodb://mongodb:27017
 MONGODB_DATABASE=refactor_agent
 
+# PostgreSQL (Agent 會話持久化)
+POSTGRES_URL=postgresql://langgraph:langgraph_secret@postgres:5432/langgraph
+
 # JWT 認證
 JWT_SECRET_KEY=your-secret-key-change-in-production
 
@@ -848,6 +851,12 @@ DOCKER_BASE_IMAGE=refactor-base:latest
 DOCKER_NETWORK=refactor-network
 DOCKER_VOLUME_PREFIX=/tmp/refactor-workspaces
 ```
+
+**重要說明**:
+- `POSTGRES_URL` - **必填**，用於 Agent 會話持久化（LangGraph checkpointing）
+  - 開發環境: `postgresql://langgraph:langgraph_secret@postgres:5432/langgraph`
+  - 生產環境: 使用實際的 PostgreSQL 服務
+  - ⚠️ 此變數必須設定，否則 Agent 無法啟動
 
 **可選項**:
 ```bash
@@ -878,51 +887,58 @@ LOG_LEVEL=INFO
 
 ### Docker Compose 部署
 
-**檔案**: `devops/docker-compose.yml`
+**檔案**:
+- 開發版：`devops/docker-compose.dev.yml`（本機 build + volume mount）
+- 正式版：`devops/docker-compose.prod.yml`（從 Artifact Registry 拉取映像）
 
-```yaml
-services:
-  mongodb:
-    image: mongo:7
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongodb_data:/data/db
-
-  api:
-    build:
-      context: ../backend
-      dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
-    environment:
-      - MONGODB_URL=mongodb://mongodb:27017
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    depends_on:
-      - mongodb
-```
-
-**啟動指令**:
+**啟動指令（開發版）**:
 ```bash
 # 啟動所有服務
-docker-compose -f devops/docker-compose.yml up -d
+docker-compose -f devops/docker-compose.dev.yml up -d
 
 # 查看日誌
-docker-compose -f devops/docker-compose.yml logs -f api
+docker-compose -f devops/docker-compose.dev.yml logs -f api
 
 # 停止服務
-docker-compose -f devops/docker-compose.yml down
+docker-compose -f devops/docker-compose.dev.yml down
+```
+
+**啟動指令（正式版）**:
+```bash
+# 需先設定環境變數（Artifact Registry 映像）
+export AR_API_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-api:latest
+export AR_FRONTEND_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-frontend:latest
+export AR_BASE_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-base:latest
+
+# 可選：指定主機資料/工作區路徑
+export HOST_DATA_DIR=/opt/refactor/data
+export HOST_WORKSPACE_DIR=/opt/refactor/workspaces
+
+docker-compose -f devops/docker-compose.prod.yml up -d
 ```
 
 ### 本地開發
 
 ```bash
-# 啟動 MongoDB
+# 1. 啟動 PostgreSQL（Agent 會話持久化必需）
+docker run -d --name refactor-postgres \
+  -p 5432:5432 \
+  -e POSTGRES_USER=langgraph \
+  -e POSTGRES_PASSWORD=langgraph_secret \
+  -e POSTGRES_DB=langgraph \
+  postgres:16
+
+# 2. 驗證 PostgreSQL 連線
+PGPASSWORD=langgraph_secret psql -h localhost -U langgraph -d langgraph -c "SELECT 1"
+
+# 3. 啟動 MongoDB
 docker run -d --name mongodb -p 27017:27017 mongo:7
 
-# 啟動 Backend
+# 4. 設定環境變數
+export POSTGRES_URL="postgresql://langgraph:langgraph_secret@localhost:5432/langgraph"
+export MONGODB_URL="mongodb://localhost:27017"
+
+# 5. 啟動 Backend
 cd backend
 source venv/bin/activate
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

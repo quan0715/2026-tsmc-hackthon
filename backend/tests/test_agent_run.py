@@ -3,7 +3,7 @@
 只測試在生產環境中實際使用的方法。
 """
 import pytest
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 from app.config import settings
 from app.services.agent_run_service import AgentRunService
 from app.models.agent_run import AgentPhase, AgentRunStatus
@@ -12,12 +12,12 @@ from app.models.agent_run import AgentPhase, AgentRunStatus
 @pytest.fixture
 async def db():
     """取得測試資料庫連接"""
-    client = AsyncIOMotorClient(settings.mongodb_url)
+    client = AsyncMongoClient(settings.mongodb_url)
     db = client[settings.mongodb_database]
     yield db
     # 清理測試資料
     await db.agent_runs.delete_many({})
-    client.close()
+    await client.close()
 
 
 @pytest.fixture

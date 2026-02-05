@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { apiErrorMessage } from '@/utils/apiError'
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('')
@@ -65,7 +66,7 @@ export default function RegisterPage() {
       } else if (err.code === 'ERR_NETWORK') {
         setError('📡 無法連線到伺服器，請檢查網路連線')
       } else {
-        setError(detail || '註冊失敗，請重試')
+        setError(apiErrorMessage(err, '註冊失敗，請重試'))
       }
     } finally {
       setLoading(false)

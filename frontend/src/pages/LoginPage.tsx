@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card'
+import { apiErrorMessage } from '@/utils/apiError'
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -46,7 +47,7 @@ export default function LoginPage() {
       } else if (err.code === 'ERR_NETWORK') {
         setError('📡 無法連線到伺服器，請檢查網路連線')
       } else {
-        setError(detail || '登入失敗，請重試')
+        setError(apiErrorMessage(err, '登入失敗，請重試'))
       }
     } finally {
       setLoading(false)

@@ -1,6 +1,83 @@
 import { X, Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { FileIcon } from './FileIcon'
 import type { OpenFile } from '@/types/file.types'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { memo } from 'react'
+
+// 副檔名對應語言
+function getLanguage(filename: string): string {
+  const ext = filename.split('.').pop()?.toLowerCase()
+  const languageMap: Record<string, string> = {
+    // JavaScript / TypeScript
+    js: 'javascript',
+    jsx: 'jsx',
+    ts: 'typescript',
+    tsx: 'tsx',
+    mjs: 'javascript',
+    cjs: 'javascript',
+    // Python
+    py: 'python',
+    pyw: 'python',
+    pyi: 'python',
+    // Web
+    html: 'html',
+    htm: 'html',
+    css: 'css',
+    scss: 'scss',
+    sass: 'sass',
+    less: 'less',
+    // Data
+    json: 'json',
+    yml: 'yaml',
+    yaml: 'yaml',
+    xml: 'xml',
+    toml: 'toml',
+    // Shell
+    sh: 'bash',
+    bash: 'bash',
+    zsh: 'bash',
+    fish: 'bash',
+    // Other languages
+    go: 'go',
+    rs: 'rust',
+    java: 'java',
+    kt: 'kotlin',
+    scala: 'scala',
+    c: 'c',
+    cpp: 'cpp',
+    h: 'c',
+    hpp: 'cpp',
+    cs: 'csharp',
+    rb: 'ruby',
+    php: 'php',
+    swift: 'swift',
+    r: 'r',
+    sql: 'sql',
+    graphql: 'graphql',
+    gql: 'graphql',
+    vue: 'vue',
+    svelte: 'svelte',
+    // Config
+    dockerfile: 'docker',
+    makefile: 'makefile',
+    env: 'bash',
+    gitignore: 'gitignore',
+  }
+  
+  // 特殊檔名處理
+  const lowerName = filename.toLowerCase()
+  if (lowerName === 'dockerfile' || lowerName.startsWith('dockerfile.')) {
+    return 'docker'
+  }
+  if (lowerName === 'makefile') {
+    return 'makefile'
+  }
+  
+  return languageMap[ext || ''] || 'text'
+}
 
 interface FileViewerProps {
   files: OpenFile[]
@@ -9,16 +86,18 @@ interface FileViewerProps {
   onTabClose: (path: string) => void
 }
 
-export function FileViewer({ files, activeFilePath, onTabSelect, onTabClose }: FileViewerProps) {
+export const FileViewer = memo(function FileViewer({
+  files,
+  activeFilePath,
+  onTabSelect,
+  onTabClose,
+}: FileViewerProps) {
   const activeFile = files.find(f => f.path === activeFilePath)
 
   if (files.length === 0) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
-        <div className="text-center">
-          <div className="text-sm">No file open</div>
-          <div className="text-xs mt-1">Select a file from the explorer</div>
-        </div>
+        <EmptyState title="No file open" description="Select a file from the explorer" />
       </div>
     )
   }
@@ -37,6 +116,7 @@ export function FileViewer({ files, activeFilePath, onTabSelect, onTabClose }: F
             }`}
             onClick={() => onTabSelect(file.path)}
           >
+            <FileIcon filename={file.name} className="w-4 h-4 flex-shrink-0" />
             <span className="truncate max-w-[120px]">{file.name}</span>
             {file.isLoading ? (
               <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
@@ -67,12 +147,30 @@ export function FileViewer({ files, activeFilePath, onTabSelect, onTabClose }: F
               <ReactMarkdown>{activeFile.content}</ReactMarkdown>
             </div>
           ) : (
-            <pre className="p-4 text-sm font-mono text-gray-300 whitespace-pre overflow-x-auto">
-              <code>{activeFile.content}</code>
-            </pre>
+            <SyntaxHighlighter
+              language={getLanguage(activeFile.name)}
+              style={vscDarkPlus}
+              showLineNumbers
+              wrapLines
+              customStyle={{
+                margin: 0,
+                padding: '1rem',
+                background: 'transparent',
+                fontSize: '0.875rem',
+                minHeight: '100%',
+              }}
+              lineNumberStyle={{
+                minWidth: '3em',
+                paddingRight: '1em',
+                color: '#6b7280',
+                userSelect: 'none',
+              }}
+            >
+              {activeFile.content}
+            </SyntaxHighlighter>
           )
         ) : null}
       </div>
     </div>
   )
-}
+})

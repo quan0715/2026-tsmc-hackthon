@@ -46,3 +46,10 @@ mongodb = MongoDB()
 def get_database() -> AsyncDatabase:
     """依賴注入：獲取資料庫實例"""
     return mongodb.get_database()
+
+
+def get_database_client() -> AsyncMongoClient:
+    """獲取 MongoDB 客戶端（用於測試）"""
+    if mongodb.client is None:
+        raise RuntimeError("資料庫未初始化")
+    return mongodb.client

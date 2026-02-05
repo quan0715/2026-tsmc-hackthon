@@ -5,6 +5,7 @@ import sys
 import uuid
 import json as json_lib
 import asyncio
+import os
 from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
@@ -20,6 +21,8 @@ from agent.server.schemas import (
 )
 from agent.server import state
 from agent.server.handlers import execute_agent, execute_chat, log_task
+from agent.models import AnthropicModelProvider
+from agent.deep_agent import RefactorAgent
 
 # 配置 logging 輸出到 stdout
 logging.basicConfig(
@@ -82,6 +85,44 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         status=TaskStatus.PENDING,
         message="聊天任務已啟動，正在背景執行"
     )
+
+
+@app.get("/threads/{thread_id}/history")
+async def get_thread_history(thread_id: str):
+    """取得指定 thread 的聊天歷史（需啟用 PostgreSQL 持久化）"""
+    # 優先使用現有 agent
+    agent = state.chat_agents.get(thread_id) or state.refactor_agents.get(thread_id)
+
+    # 若不存在則建立新的 agent 來讀取 state
+    if not agent:
+        postgres_url = os.environ.get("POSTGRES_URL")
+        if not postgres_url:
+            raise HTTPException(
+                status_code=500,
+                detail="POSTGRES_URL environment variable is not set. PostgreSQL persistence is required."
+            )
+
+        provider = AnthropicModelProvider()
+        model = provider.get_model()
+
+        try:
+            agent = RefactorAgent(
+                model=model,
+                verbose=False,
+                postgres_url=postgres_url,
+            )
+        except (ValueError, RuntimeError) as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        messages = agent.get_thread_history(thread_id=thread_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "thread_id": thread_id,
+        "messages": messages,
+    }
 
 
 # === Run Routes ===

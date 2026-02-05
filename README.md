@@ -35,23 +35,33 @@ cp .env.example .env
 docker build -t refactor-base:latest -f devops/base-image/Dockerfile .
 ```
 
+Dockerfile 位置：
+- Backend：`backend/Dockerfile`（開發）、`backend/Dockerfile.prod`（正式）
+- Frontend：`frontend/Dockerfile`（開發）、`frontend/Dockerfile.prod`（正式）
+
 ### 啟動服務
 
 **使用 Docker Compose（推薦）**
 
 ```bash
 # 啟動所有服務（MongoDB + Backend API + Frontend）
-docker-compose -f devops/docker-compose.yml up -d
+docker-compose -f devops/docker-compose.dev.yml up -d
 
 # 查看服務狀態
-docker-compose -f devops/docker-compose.yml ps
+docker-compose -f devops/docker-compose.dev.yml ps
 
 # 查看日誌
-docker-compose -f devops/docker-compose.yml logs -f api
+docker-compose -f devops/docker-compose.dev.yml logs -f api
 
 # 停止服務
-docker-compose -f devops/docker-compose.yml down
+docker-compose -f devops/docker-compose.dev.yml down
 ```
+
+**GCE 單機（正式環境）**
+
+- 先將 `refactor-base` / `refactor-api` / `refactor-frontend` 映像推送到 Artifact Registry
+- 設定 `REGISTRY_HOST` / `GCP_PROJECT_ID` / `GAR_REPOSITORY` / `IMAGE_TAG` 後，用 `devops/docker-compose.prod.yml` 啟動（會從 Artifact Registry 拉取映像）
+- 也可直接使用 `./scripts/deploy-prod.sh`（會先 pull + 啟動）
 
 服務端點：
 - Frontend: http://localhost:5173
@@ -225,14 +235,14 @@ docker images | grep refactor-base
 
 1. 檢查容器內 AI Server 的 LLM API Key 設定
 2. 查看容器日誌：`docker logs refactor-project-{project_id}`
-3. 檢查 API 日誌：`docker-compose logs -f api`
+3. 檢查 API 日誌：`docker-compose -f devops/docker-compose.dev.yml logs -f api`
 4. 查看 Agent 執行日誌：使用 SSE stream 端點
 
 ### 如何清理測試資料？
 
 ```bash
 # 停止並移除所有容器和資料
-docker-compose -f devops/docker-compose.yml down -v
+docker-compose -f devops/docker-compose.dev.yml down -v
 
 # 清理專案容器
 docker ps -a | grep refactor-project | awk '{print $1}' | xargs docker rm -f

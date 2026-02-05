@@ -3,13 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException
 from pymongo.asynchronous.database import AsyncDatabase
 from starlette.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 import httpx
 import logging
 import uuid
 
 from ..database.mongodb import get_database
 from ..services.project_service import ProjectService
+from ..services.chat_session_service import ChatSessionService
 from ..models.project import ProjectStatus
 from ..dependencies.auth import verify_project_access
 
@@ -33,6 +34,40 @@ class ChatMessageResponse(BaseModel):
     message: str
 
 
+class ChatSessionResponse(BaseModel):
+    """聊天會話回應"""
+    thread_id: str
+    project_id: str
+    title: Optional[str] = None
+    created_at: str
+    last_message_at: str
+
+
+class ChatSessionListResponse(BaseModel):
+    """聊天會話列表回應"""
+    total: int
+    sessions: List[ChatSessionResponse]
+
+
+class ChatHistoryMessage(BaseModel):
+    """聊天歷史訊息"""
+    id: str
+    role: str
+    content: str
+    timestamp: str
+    toolName: Optional[str] = None
+    toolCallId: Optional[str] = None
+    toolInput: Optional[dict] = None
+    toolOutput: Optional[str] = None
+    tokenUsage: Optional[dict] = None
+
+
+class ChatHistoryResponse(BaseModel):
+    """聊天歷史回應"""
+    thread_id: str
+    messages: List[ChatHistoryMessage]
+
+
 def get_container_name(project_id: str) -> str:
     """獲取容器名稱"""
     return f"refactor-project-{project_id}"
@@ -45,10 +80,18 @@ async def get_project_service(
     return ProjectService(db)
 
 
+async def get_chat_session_service(
+    db: AsyncDatabase = Depends(get_database),
+) -> ChatSessionService:
+    """依賴注入：獲取 ChatSessionService"""
+    return ChatSessionService(db)
+
+
 @router.post("/{project_id}/chat", response_model=ChatMessageResponse)
 async def send_chat_message(
     project_id: str,
     request: ChatMessageRequest,
+    chat_session_service: ChatSessionService = Depends(get_chat_session_service),
     project=Depends(verify_project_access),
 ):
     """發送聊天訊息
@@ -67,6 +110,10 @@ async def send_chat_message(
 
     # 生成或使用提供的 thread_id
     thread_id = request.thread_id or f"chat-{project_id}-{uuid.uuid4()}"
+    # 使用首則訊息作為 session title（僅在首次建立時生效）
+    title = " ".join(request.message.strip().split())
+    if len(title) > 60:
+        title = title[:60].rstrip()
 
     container_name = get_container_name(project_id)
 
@@ -88,6 +135,9 @@ async def send_chat_message(
             f"聊天任務已啟動: project={project_id}, task_id={result['task_id']}"
         )
 
+        # 建立或更新聊天會話
+        await chat_session_service.upsert_session(project_id, thread_id, title=title)
+
         return ChatMessageResponse(
             task_id=result["task_id"],
             thread_id=result["thread_id"],
@@ -98,6 +148,62 @@ async def send_chat_message(
 
     except httpx.HTTPError as e:
         logger.error(f"聊天請求失敗: {e}")
+        raise HTTPException(status_code=503, detail=f"AI Server 錯誤: {str(e)}")
+
+
+@router.get("/{project_id}/chat/sessions", response_model=ChatSessionListResponse)
+async def list_chat_sessions(
+    project_id: str,
+    chat_session_service: ChatSessionService = Depends(get_chat_session_service),
+    project=Depends(verify_project_access),
+):
+    """列出專案的聊天會話（依最後訊息時間排序）"""
+    sessions = await chat_session_service.list_sessions(project_id)
+    response_sessions = [
+        ChatSessionResponse(
+            thread_id=s.thread_id,
+            project_id=s.project_id,
+            title=s.title,
+            created_at=s.created_at.isoformat(),
+            last_message_at=s.last_message_at.isoformat(),
+        )
+        for s in sessions
+    ]
+    return ChatSessionListResponse(total=len(response_sessions), sessions=response_sessions)
+
+
+@router.get(
+    "/{project_id}/chat/sessions/{thread_id}/history",
+    response_model=ChatHistoryResponse,
+)
+async def get_chat_history(
+    project_id: str,
+    thread_id: str,
+    chat_session_service: ChatSessionService = Depends(get_chat_session_service),
+    project=Depends(verify_project_access),
+):
+    """取得聊天歷史（透過容器 AI Server）"""
+    # 確保 session 屬於該專案
+    session = await chat_session_service.get_session(project_id, thread_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    container_name = get_container_name(project_id)
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                f"http://{container_name}:8000/threads/{thread_id}/history"
+            )
+            response.raise_for_status()
+            result = response.json()
+
+        return ChatHistoryResponse(
+            thread_id=result.get("thread_id", thread_id),
+            messages=result.get("messages", []),
+        )
+    except httpx.HTTPError as e:
+        logger.error(f"取得聊天歷史失敗: {e}")
         raise HTTPException(status_code=503, detail=f"AI Server 錯誤: {str(e)}")
 
 

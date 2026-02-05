@@ -90,3 +90,18 @@ export interface ChatSession {
   createdAt: string
   lastMessageAt: string
 }
+
+// 聊天會話（列表用）
+export interface ChatSessionSummary {
+  thread_id: string
+  project_id: string
+  title?: string
+  created_at: string
+  last_message_at: string
+}
+
+// 聊天歷史回應
+export interface ChatHistoryResponse {
+  thread_id: string
+  messages: ChatMessage[]
+}

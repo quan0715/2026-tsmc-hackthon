@@ -1,0 +1,110 @@
+name: Build and Push Images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+jobs:
+  build-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        if: github.event_name == 'workflow_dispatch'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        if: github.event_name == 'workflow_dispatch'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth
+        if: github.event_name == 'workflow_dispatch'
+        run: gcloud auth configure-docker "$REGISTRY_HOST" --quiet
+
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      - name: CI environment check
+        run: ./scripts/check-env-ci.sh
+
+      - name: Build base image (build only)
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: devops/base-image/Dockerfile
+          push: false
+          tags: |
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }}
+
+      - name: Build and push base image (manual only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: devops/base-image/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }}
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:latest
+
+      - name: Build API image (build only)
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile.prod
+          push: false
+          tags: |
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }}
+
+      - name: Build and push API image (manual only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: backend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }}
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:latest
+
+      - name: Build frontend image (build only)
+        if: github.event_name != 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile.prod
+          push: false
+          build-args: |
+            VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
+          tags: |
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }}
+
+      - name: Build and push frontend image (manual only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: frontend/Dockerfile.prod
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=${{ env.VITE_API_BASE_URL }}
+          tags: |
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }}
+            ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:latest

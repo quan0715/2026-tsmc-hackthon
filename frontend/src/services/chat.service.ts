@@ -4,6 +4,8 @@ import type {
   SendChatMessageResponse,
   ChatTaskStatus,
   ChatStreamEvent,
+  ChatSessionSummary,
+  ChatHistoryResponse,
 } from '@/types/chat.types'
 
 /**
@@ -43,6 +45,29 @@ export const stopChatAPI = async (
   taskId: string
 ): Promise<void> => {
   await api.post(`/api/v1/projects/${projectId}/chat/${taskId}/stop`)
+}
+
+/**
+ * 取得聊天會話列表
+ */
+export const listChatSessionsAPI = async (
+  projectId: string
+): Promise<ChatSessionSummary[]> => {
+  const response = await api.get(`/api/v1/projects/${projectId}/chat/sessions`)
+  return response.data.sessions
+}
+
+/**
+ * 取得聊天歷史
+ */
+export const getChatHistoryAPI = async (
+  projectId: string,
+  threadId: string
+): Promise<ChatHistoryResponse> => {
+  const response = await api.get(
+    `/api/v1/projects/${projectId}/chat/sessions/${threadId}/history`
+  )
+  return response.data
 }
 
 /**

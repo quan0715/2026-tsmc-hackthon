@@ -1,29 +1,27 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
+import { updateProjectAPI, deleteProjectAPI, provisionProjectAPI, reprovisionProjectAPI } from '@/services/project.service'
 import {
-  getProjectAPI,
-  updateProjectAPI,
-  deleteProjectAPI,
-  provisionProjectAPI,
-  reprovisionProjectAPI,
-} from '@/services/project.service'
-import {
-  getAgentRunsAPI,
   stopAgentRunAPI,
   resetRefactorSessionAPI,
 } from '@/services/agent.service'
-import { getFileTreeAPI, getFileContentAPI } from '@/services/file.service'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Dialog } from '@/components/ui/dialog'
+import { ErrorState } from '@/components/ui/ErrorState'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { TaskList, type Task } from '@/components/agent/TaskList'
 import { FileTree } from '@/components/file/FileTree'
 import { FileViewer } from '@/components/file/FileViewer'
 import { ProjectSettingsModal } from '@/components/project/ProjectSettingsModal'
-import type { Project } from '@/types/project.types'
 import { AgentRunStatus } from '@/types/agent.types'
-import type { AgentRunDetail } from '@/types/agent.types'
-import type { FileTreeNode, OpenFile } from '@/types/file.types'
+import { ProjectStatusBadge } from '@/components/project/ProjectStatusBadge'
+import { ChatSessionList } from '@/components/chat/ChatSessionList'
+import { PanelHeader } from '@/components/layout/PanelHeader'
+import { apiErrorMessage } from '@/utils/apiError'
+import { useProject } from '@/hooks/useProject'
+import { useAgentRuns } from '@/hooks/useAgentRuns'
+import { useFileTree } from '@/hooks/useFileTree'
+import { useChatSessions } from '@/hooks/useChatSessions'
 import {
   Square,
   Settings,
@@ -42,18 +40,33 @@ export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  // Project state
-  const [project, setProject] = useState<Project | null>(null)
-  const [, setRuns] = useState<AgentRunDetail[]>([])
-  const [currentRun, setCurrentRun] = useState<AgentRunDetail | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
-  // File state
-  const [fileTree, setFileTree] = useState<FileTreeNode[]>([])
-  const [openFiles, setOpenFiles] = useState<OpenFile[]>([])
-  const [activeFilePath, setActiveFilePath] = useState<string | null>(null)
-  const [loadingTree, setLoadingTree] = useState(false)
+  const { project, error, loadProject } = useProject(id)
+  const { currentRun, setCurrentRun, runtime, loadRuns } = useAgentRuns(id)
+  const {
+    fileTree,
+    openFiles,
+    activeFilePath,
+    loadingTree,
+    loadFileTree,
+    handleFileSelect,
+    handleTabClose,
+    setActiveFilePath,
+  } = useFileTree(id, project?.container_id)
+  const {
+    sessions: chatSessions,
+    threadId: chatThreadId,
+    messages: chatMessages,
+    loadingHistory: chatLoadingHistory,
+    isStreaming: chatStreaming,
+    setIsStreaming: setChatStreaming,
+    setThreadId: setChatThreadId,
+    setMessages: setChatMessages,
+    loadSessions: loadChatSessions,
+    selectSession: selectChatSession,
+    startNewChat,
+  } = useChatSessions(id)
 
   // Task state
   const [tasks, setTasks] = useState<Task[]>([])
@@ -62,53 +75,11 @@ export default function ProjectDetailPage() {
   const [showSettings, setShowSettings] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
   const [isProvisioning, setIsProvisioning] = useState(false)
+  const [dialog, setDialog] = useState<{ title: string; message: string } | null>(null)
 
   // Panel collapse state (only left and right panels can collapse)
   const [infoCollapsed, setInfoCollapsed] = useState(false)
   const [treeCollapsed, setTreeCollapsed] = useState(false)
-
-  // Runtime calculation
-  const [runtime, setRuntime] = useState('00:00:00')
-
-  // Load project data
-  const loadProject = useCallback(async () => {
-    if (!id) return
-    try {
-      const data = await getProjectAPI(id)
-      setProject(data)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load project')
-    }
-  }, [id])
-
-  // Load agent runs
-  const loadRuns = useCallback(async () => {
-    if (!id) return
-    try {
-      const data = await getAgentRunsAPI(id)
-      const runsList = data.runs || []
-      setRuns(runsList)
-      const running = runsList.find((r: AgentRunDetail) => r.status === 'RUNNING')
-      const latest = runsList[0]
-      setCurrentRun(running || latest || null)
-    } catch (err) {
-      console.error('Failed to load runs:', err)
-    }
-  }, [id])
-
-  // Load file tree
-  const loadFileTree = useCallback(async () => {
-    if (!id || !project?.container_id) return
-    setLoadingTree(true)
-    try {
-      const data = await getFileTreeAPI(id)
-      setFileTree(data.tree)
-    } catch (err) {
-      console.error('Failed to load file tree:', err)
-    } finally {
-      setLoadingTree(false)
-    }
-  }, [id, project?.container_id])
 
   // Initial load
   useEffect(() => {
@@ -116,10 +87,11 @@ export default function ProjectDetailPage() {
       setLoading(true)
       await loadProject()
       await loadRuns()
+      await loadChatSessions(true)
       setLoading(false)
     }
     init()
-  }, [loadProject, loadRuns])
+  }, [loadProject, loadRuns, loadChatSessions])
 
   // Load file tree when project is ready
   useEffect(() => {
@@ -127,74 +99,6 @@ export default function ProjectDetailPage() {
       loadFileTree()
     }
   }, [project?.status, loadFileTree])
-
-  // Poll runs when agent is running
-  useEffect(() => {
-    if (currentRun?.status === 'RUNNING') {
-      const interval = setInterval(loadRuns, 5000)
-      return () => clearInterval(interval)
-    }
-  }, [currentRun?.status, loadRuns])
-
-  // Update runtime
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (currentRun?.created_at && currentRun.status === 'RUNNING') {
-        const start = new Date(currentRun.created_at).getTime()
-        const now = Date.now()
-        const diff = Math.floor((now - start) / 1000)
-        const h = Math.floor(diff / 3600)
-        const m = Math.floor((diff % 3600) / 60)
-        const s = diff % 60
-        setRuntime(
-          `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-        )
-      } else {
-        setRuntime('--:--:--')
-      }
-    }, 1000)
-    return () => clearInterval(interval)
-  }, [currentRun?.created_at, currentRun?.status])
-
-  // File operations
-  const handleFileSelect = async (path: string, name: string) => {
-    // Check if already open
-    const existing = openFiles.find((f) => f.path === path)
-    if (existing) {
-      setActiveFilePath(path)
-      return
-    }
-
-    // Add loading placeholder
-    const newFile: OpenFile = { path, name, content: '', isLoading: true }
-    setOpenFiles((prev) => [...prev, newFile])
-    setActiveFilePath(path)
-
-    // Load content
-    try {
-      const data = await getFileContentAPI(id!, path)
-      setOpenFiles((prev) =>
-        prev.map((f) =>
-          f.path === path ? { ...f, content: data.content, isLoading: false } : f
-        )
-      )
-    } catch (err) {
-      console.error('Failed to load file:', err)
-      setOpenFiles((prev) =>
-        prev.map((f) =>
-          f.path === path ? { ...f, content: 'Failed to load file', isLoading: false } : f
-        )
-      )
-    }
-  }
-
-  const handleTabClose = (path: string) => {
-    setOpenFiles((prev) => prev.filter((f) => f.path !== path))
-    if (activeFilePath === path) {
-      const remaining = openFiles.filter((f) => f.path !== path)
-      setActiveFilePath(remaining.length > 0 ? remaining[remaining.length - 1].path : null)
-    }
-  }
 
   // Agent operations
   const handleProvision = async () => {
@@ -204,8 +108,8 @@ export default function ProjectDetailPage() {
       await provisionProjectAPI(id)
       await loadProject()
       await loadFileTree()
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Provision failed')
+    } catch (err: unknown) {
+      setDialog({ title: 'Provision failed', message: apiErrorMessage(err, 'Provision failed') })
     } finally {
       setIsProvisioning(false)
     }
@@ -222,8 +126,8 @@ export default function ProjectDetailPage() {
         await loadRuns()
         await loadProject()
       }, 2000)
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to stop')
+    } catch (err: unknown) {
+      setDialog({ title: 'Failed to stop', message: apiErrorMessage(err, 'Failed to stop') })
     } finally {
       setIsStopping(false)
     }
@@ -267,14 +171,12 @@ export default function ProjectDetailPage() {
   // Error state
   if (error || !project) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-900">
-        <div className="text-center">
-          <div className="text-red-400 mb-4">{error || 'Project not found'}</div>
-          <Link to="/projects" className="text-purple-400 hover:underline">
-            Back to projects
-          </Link>
-        </div>
-      </div>
+      <ErrorState
+        title="Project not found"
+        message={error || 'Unable to load project'}
+        actionLabel="Back to projects"
+        onAction={() => navigate('/projects')}
+      />
     )
   }
 
@@ -304,7 +206,7 @@ export default function ProjectDetailPage() {
           <h1 className="text-sm font-medium truncate" title={projectName}>
             {projectName}
           </h1>
-          <StatusBadge status={project.status} />
+          <ProjectStatusBadge status={project.status} />
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -334,9 +236,7 @@ export default function ProjectDetailPage() {
           <>
             <Panel id="info" defaultSize="15%" minSize="10%" maxSize="25%">
               <div className="h-full flex flex-col border-r border-gray-800">
-                <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800">
-                  <span className="text-xs text-gray-500 uppercase">Info</span>
-                </div>
+                <PanelHeader title="Info" />
                 <div className="p-2 space-y-2 text-xs border-b border-gray-800">
                   <div className="flex justify-between text-gray-400">
                     <span>Iteration</span>
@@ -353,6 +253,14 @@ export default function ProjectDetailPage() {
                     </div>
                   )}
                 </div>
+
+                <ChatSessionList
+                  sessions={chatSessions}
+                  activeThreadId={chatThreadId}
+                  disabled={chatStreaming}
+                  onSelect={selectChatSession}
+                  onNew={startNewChat}
+                />
 
                 {tasks.length > 0 && (
                   <div className="flex-1 overflow-y-auto p-2">
@@ -388,12 +296,16 @@ export default function ProjectDetailPage() {
         {/* Panel 2: Chat */}
         <Panel id="chat" defaultSize="25%" minSize="10%" maxSize="50%">
           <div className="h-full flex flex-col border-r border-gray-800">
-            <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800">
-              <span className="text-xs text-gray-500 uppercase">Chat</span>
-            </div>
+            <PanelHeader title="Chat" />
             <div className="flex-1 overflow-hidden">
               <ChatPanel
                 projectId={id!}
+                threadId={chatThreadId}
+                messages={chatMessages}
+                onThreadIdChange={setChatThreadId}
+                onMessagesChange={setChatMessages}
+                onStreamingChange={setChatStreaming}
+                loadingHistory={chatLoadingHistory}
                 disabled={project.status !== 'READY'}
                 onTasksUpdate={setTasks}
               />
@@ -401,8 +313,8 @@ export default function ProjectDetailPage() {
           </div>
         </Panel>
 
-        <Separator className="w-1 bg-gray-700 hover:bg-purple-600 transition-colors flex items-center justify-center">
-          <GripVertical className="w-3 h-3 text-gray-500" />
+        <Separator className="w-px bg-gray-800 hover:bg-gray-700 transition-colors flex items-center justify-center">
+          <GripVertical className="w-2 h-2 text-gray-600 opacity-60" />
         </Separator>
 
         {/* Panel 3: File Viewer (main area) */}
@@ -417,17 +329,27 @@ export default function ProjectDetailPage() {
           </div>
         </Panel>
 
-        <Separator className="w-1 bg-gray-700 hover:bg-purple-600 transition-colors flex items-center justify-center">
-          <GripVertical className="w-3 h-3 text-gray-500" />
+        <Separator className="w-px bg-gray-800 hover:bg-gray-700 transition-colors flex items-center justify-center">
+          <GripVertical className="w-2 h-2 text-gray-600 opacity-60" />
         </Separator>
 
         {/* Panel 4: File Tree */}
         {!treeCollapsed && (
           <Panel id="tree" defaultSize="20%" minSize="10%" maxSize="35%">
             <div className="h-full flex flex-col border-l border-gray-800">
-              <div className="flex items-center justify-between px-2 py-1 border-b border-gray-800">
-                <span className="text-xs text-gray-500 uppercase">Explorer</span>
-              </div>
+              <PanelHeader
+                title="Explorer"
+                right={(
+                  <button
+                    onClick={loadFileTree}
+                    disabled={loadingTree}
+                    className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white disabled:opacity-50"
+                    title="Refresh"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${loadingTree ? 'animate-spin' : ''}`} />
+                  </button>
+                )}
+              />
               <div className="flex-1 overflow-hidden">
                 {loadingTree ? (
                   <div className="h-full flex items-center justify-center">
@@ -456,23 +378,12 @@ export default function ProjectDetailPage() {
         onReprovision={handleReprovision}
         onResetSession={handleResetSession}
       />
+      <Dialog
+        open={!!dialog}
+        title={dialog?.title || ''}
+        message={dialog?.message || ''}
+        onClose={() => setDialog(null)}
+      />
     </div>
-  )
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const variants: Record<string, 'default' | 'secondary' | 'destructive' | 'success' | 'warning'> = {
-    CREATED: 'secondary',
-    PROVISIONING: 'warning',
-    READY: 'success',
-    RUNNING: 'default',
-    STOPPED: 'secondary',
-    FAILED: 'destructive',
-  }
-
-  return (
-    <Badge variant={variants[status] || 'secondary'} className="text-xs">
-      {status}
-    </Badge>
   )
 }

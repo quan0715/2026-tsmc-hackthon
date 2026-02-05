@@ -8,8 +8,12 @@ WORKDIR /app
 # 複製 package.json 和 package-lock.json
 COPY frontend/package*.json ./
 
-# 安裝依賴
-RUN npm ci --only=production
+# 安裝依賴（包含 build 所需的 devDependencies）
+RUN npm ci
+
+# 建置時注入 API Base URL（Vite 會在 build 時讀取）
+ARG VITE_API_BASE_URL=http://localhost:8000
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 # 複製前端代碼
 COPY frontend/ .

@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card'
 import { ProjectType } from '@/types/project.types'
 import { GitBranch, MessageSquare } from 'lucide-react'
+import { apiErrorMessage } from '@/utils/apiError'
 
 export default function CreateProjectPage() {
   const navigate = useNavigate()
@@ -73,15 +74,10 @@ export default function CreateProjectPage() {
         branch,
         spec,
       })
-      // Sandbox 專案導向聊天頁面，重構專案導向詳情頁面
-      if (projectType === ProjectType.SANDBOX) {
-        navigate(`/projects/${project.id}/chat`)
-      } else {
-        navigate(`/projects/${project.id}`)
-      }
+      // 專案建立完成後導向詳情頁面
+      navigate(`/projects/${project.id}`)
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } }
-      setError(error.response?.data?.detail || '建立專案失敗')
+      setError(apiErrorMessage(err, '建立專案失敗'))
       console.error('建立專案失敗', err)
     } finally {
       setLoading(false)

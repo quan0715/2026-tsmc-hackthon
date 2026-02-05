@@ -19,7 +19,7 @@ docker build -t refactor-base:latest -f devops/base-image/Dockerfile .
 ### 2. 啟動所有服務
 
 ```bash
-docker-compose -f devops/docker-compose.yml up -d
+docker-compose -f devops/docker-compose.dev.yml up -d
 ```
 
 這會啟動：
@@ -32,7 +32,7 @@ docker-compose -f devops/docker-compose.yml up -d
 
 ```bash
 # 檢查 PostgreSQL 是否正常運行
-docker-compose -f devops/docker-compose.yml logs postgres
+docker-compose -f devops/docker-compose.dev.yml logs postgres
 
 # 連接到 PostgreSQL
 docker exec -it refactor-postgres psql -U langgraph -d langgraph
@@ -116,7 +116,7 @@ SELECT thread_id, checkpoint_id, created_at FROM checkpoints ORDER BY created_at
 
 1. 在聊天中進行幾輪對話
 2. 記下 thread_id
-3. 重啟容器：`docker-compose -f devops/docker-compose.yml restart`
+3. 重啟容器：`docker-compose -f devops/docker-compose.dev.yml restart`
 4. 使用相同的 thread_id 繼續對話
 5. 驗證 AI 能記住之前的上下文
 
@@ -158,5 +158,5 @@ docker exec refactor-project-<project_id> env | grep POSTGRES
 ### 對話沒有保存
 
 1. 確認使用了正確的 thread_id
-2. 檢查 PostgreSQL 日誌：`docker-compose logs postgres`
+2. 檢查 PostgreSQL 日誌：`docker-compose -f devops/docker-compose.dev.yml logs postgres`
 3. 確認 `langgraph-checkpoint-postgres` 套件已安裝

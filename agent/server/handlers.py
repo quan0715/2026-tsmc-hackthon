@@ -51,12 +51,17 @@ def execute_agent(task_id: str, spec: str, thread_id: str, verbose: bool):
             state.tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
             return
 
-        # 獲取 PostgreSQL URL
+        # 獲取 PostgreSQL URL（必填）
         postgres_url = os.environ.get("POSTGRES_URL")
-        if postgres_url:
-            log_task(task_id, "🔗 使用 PostgreSQL 持久化")
-        else:
-            log_task(task_id, "📝 使用內存模式（對話不會持久化）")
+        if not postgres_url:
+            error_msg = "POSTGRES_URL environment variable is not set. PostgreSQL persistence is required."
+            log_task(task_id, f"❌ 錯誤: {error_msg}")
+            state.tasks[task_id]["status"] = TaskStatus.FAILED
+            state.tasks[task_id]["error_message"] = error_msg
+            state.tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
+            return
+
+        log_task(task_id, "🔗 使用 PostgreSQL 持久化")
 
         # 獲取或建立 Agent（複用同一 thread 的 agent）
         if thread_id not in state.refactor_agents:
@@ -178,12 +183,17 @@ def execute_chat(task_id: str, thread_id: str, message: str, verbose: bool):
             state.tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
             return
 
-        # 獲取 PostgreSQL URL
+        # 獲取 PostgreSQL URL（必填）
         postgres_url = os.environ.get("POSTGRES_URL")
-        if postgres_url:
-            log_task(task_id, "🔗 使用 PostgreSQL 持久化")
-        else:
-            log_task(task_id, "📝 使用內存模式（對話不會持久化）")
+        if not postgres_url:
+            error_msg = "POSTGRES_URL environment variable is not set. PostgreSQL persistence is required."
+            log_task(task_id, f"❌ 錯誤: {error_msg}")
+            state.tasks[task_id]["status"] = TaskStatus.FAILED
+            state.tasks[task_id]["error_message"] = error_msg
+            state.tasks[task_id]["finished_at"] = datetime.utcnow().isoformat()
+            return
+
+        log_task(task_id, "🔗 使用 PostgreSQL 持久化")
 
         # 獲取或建立 Agent
         if thread_id not in state.chat_agents:
