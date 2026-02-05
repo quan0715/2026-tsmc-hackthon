@@ -36,7 +36,6 @@ export default function LoginPage() {
     } catch (err: any) {
       // 詳細的錯誤處理
       const status = err.response?.status
-      const detail = err.response?.data?.detail
 
       if (status === 401) {
         setError('❌ 使用者名稱或密碼錯誤，請重新輸入')

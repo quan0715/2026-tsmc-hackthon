@@ -238,7 +238,7 @@ export function ChatPanel({
       case "tool_call_result":
         if (event.content) {
           onMessagesChange((prev) => {
-            const lastToolIdx = prev.findLastIndex((m) => m.role === "tool");
+            const lastToolIdx = prev.findLastIndex((m: ChatMessage) => m.role === "tool");
             if (lastToolIdx >= 0) {
               const newMessages = [...prev];
               newMessages[lastToolIdx] = {
