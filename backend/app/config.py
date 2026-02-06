@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     docker_volume_prefix: str = "/tmp/refactor-workspaces"
 
     # 容器資源限制
-    container_cpu_limit: float = 2.0
-    container_memory_limit: str = "2g"
+    container_cpu_limit: float = 4.0
+    container_memory_limit: str = "8g"
 
     # Git 設定
     git_clone_timeout: int = 300
@@ -43,12 +43,9 @@ class Settings(BaseSettings):
 
     # LLM 設定 - Anthropic
     anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-4-5-20250929"
 
     # Vertex AI 設定
     gcp_project_id: str = ""
-    gcp_location: str = "us-central1"
-    vertex_ai_model: str = "gemini-2.5-pro"
     google_application_credentials: Optional[str] = None
 
     class Config:
