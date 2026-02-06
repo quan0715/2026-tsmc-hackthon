@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pymongo.asynchronous.database import AsyncDatabase
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import StreamingResponse
+from pydantic import BaseModel
+from typing import Optional
 import httpx
 import logging
 import uuid
@@ -37,9 +39,15 @@ async def get_project_service(
     return ProjectService(db)
 
 
+class AgentRunRequest(BaseModel):
+    """Agent Run 請求"""
+    model: Optional[str] = None
+
+
 @router.post("/{project_id}/agent/run")
 async def run_agent(
     project_id: str,
+    request: AgentRunRequest = AgentRunRequest(),
     project_service: ProjectService = Depends(get_project_service),
     project = Depends(verify_project_access),
 ):
@@ -77,7 +85,8 @@ async def run_agent(
                 json={
                     "spec": project.spec,
                     "thread_id": thread_id,
-                    "verbose": True
+                    "verbose": True,
+                    "model": request.model,
                 }
             )
             run_response.raise_for_status()

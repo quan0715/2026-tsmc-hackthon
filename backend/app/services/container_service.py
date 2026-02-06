@@ -73,6 +73,22 @@ class ContainerService:
             env_vars.extend(["-e", f"POSTGRES_URL={settings.postgres_url}"])
             logger.info(f"容器將使用 PostgreSQL 持久化: {settings.postgres_url}")
 
+            # 傳遞 GCP Project ID（用於 Vertex AI 模型）
+            if settings.gcp_project_id:
+                env_vars.extend(["-e", f"GCP_PROJECT_ID={settings.gcp_project_id}"])
+                logger.info(f"容器將使用 GCP Project: {settings.gcp_project_id}")
+
+            # 掛載 GCP Service Account credentials
+            if settings.google_application_credentials:
+                host_creds_path = settings.google_application_credentials
+                container_creds_path = "/workspace/credentials/gcp-credentials.json"
+                if os.path.exists(host_creds_path):
+                    volume_args.extend(["-v", f"{host_creds_path}:{container_creds_path}:ro"])
+                    env_vars.extend(["-e", f"GOOGLE_APPLICATION_CREDENTIALS={container_creds_path}"])
+                    logger.info("容器將掛載 GCP credentials")
+                else:
+                    logger.warning(f"GCP credentials 檔案不存在: {host_creds_path}")
+
             # 建立容器
             cmd = [
                 "docker", "create",

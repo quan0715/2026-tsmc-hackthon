@@ -28,48 +28,79 @@ class VertexModelProvider:
                 "Vertex AI dependencies not available. "
                 "Install with: pip install langchain-google-vertexai langchain-google-genai"
             )
-        self.credentials = self.load_credentials(credentials_path)
+        self.credentials = self._load_credentials(credentials_path)
         self.project = project
-        
-    def load_credentials(self, credentials_path: str):
+
+    def _load_credentials(self, credentials_path: str):
         try:
-            self.credentials = Credentials.from_service_account_file(
+            return Credentials.from_service_account_file(
                 credentials_path,
                 scopes=["https://www.googleapis.com/auth/cloud-platform"],
             )
         except FileNotFoundError:
             raise ValueError("credentials.json file not found")
 
-    def get_anthropic_vertex_model(self):
+    def get_anthropic_vertex_model(
+        self,
+        model_name: str = "claude-sonnet-4-5",
+        location: str = "us-east5",
+    ):
+        """取得 Anthropic Vertex AI 模型"""
         return ChatAnthropicVertex(
             project=self.project,
-            location="us-east5",
-            model_name="claude-sonnet-4-5",
-            credentials=self.credentials,  # 使用 Service Account
+            location=location,
+            model_name=model_name,
+            credentials=self.credentials,
         )
-        
-    def get_gemini_vertex_model(self):
+
+    def get_gemini_vertex_model(
+        self,
+        model_name: str = "gemini-2.5-pro",
+        location: str = "us-central1",
+    ):
+        """取得 Gemini Vertex AI 模型"""
         return ChatGoogleGenerativeAI(
             project=self.project,
-            location="us-central1",
-            model="gemini-2.5-pro",
+            location=location,
+            model=model_name,
             vertexai=True,
             temperature=0.7,
             max_output_tokens=8000,
             top_p=0.95,
-            credentials=self.credentials,  # 使用 Service Account
+            credentials=self.credentials,
+        )
+
+    def get_vertex_model(
+        self,
+        model_name: str,
+        location: str = "us-central1",
+    ):
+        """取得 Vertex AI Model Garden 中的通用模型
+
+        支援：DeepSeek, Qwen, Llama, GPT OSS 等第三方模型
+        """
+        return ChatGoogleGenerativeAI(
+            project=self.project,
+            location=location,
+            model=model_name,
+            vertexai=True,
+            temperature=0.7,
+            max_output_tokens=8000,
+            top_p=0.95,
+            credentials=self.credentials,
         )
 
 
 class AnthropicModelProvider:
-    def __init__(self):
-        self.api_key = os.getenv("ANTHROPIC_API_KEY")
+    def __init__(self, api_key: str = None):
+        self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if self.api_key is None:
             raise ValueError("ANTHROPIC_API_KEY is not set")
 
-    def get_model(self): 
+    def get_model(self, model_name: str = "claude-haiku-4-5-20251001"):
+        """取得 Anthropic 模型"""
         return ChatAnthropic(
-            model="claude-haiku-4-5-20251001",
+            model=model_name,
             api_key=self.api_key,
         )
 
@@ -83,7 +114,7 @@ if __name__ == "__main__":
     #     project=PROJECT_ID, credentials_path=CREDENTIALS_PATH)
     # context_model = vertex_model_provider.get_gemini_vertex_model()
     result = context_model.stream(
-        [   
+        [
             SystemMessage(content="你是Quan的 Coding 助理，幫忙處理coding相關的問題"),
             HumanMessage(content="請幫我寫一個Hello World的程式，C++語言"),
         ],

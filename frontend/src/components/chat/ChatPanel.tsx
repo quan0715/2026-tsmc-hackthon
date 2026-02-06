@@ -15,11 +15,12 @@ import { stopAgentRunAPI } from "@/services/agent.service";
 import type { ChatMessage, ChatStreamEvent } from "@/types/chat.types";
 import type { AgentRunDetail } from "@/types/agent.types";
 import type { Task } from "@/components/agent/TaskList";
-import { Bot, User, Wrench, Square, Loader2, ArrowUp } from "lucide-react";
+import { Bot, User, Wrench, Square, Loader2, ArrowUp, ChevronDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { apiErrorMessage } from "@/utils/apiError";
 import { useAgentRunStream } from "@/hooks/useAgentRunStream";
+import { ModelSelector } from "@/components/common/ModelSelector";
 
 interface Props {
   projectId: string;
@@ -50,6 +51,7 @@ export function ChatPanel({
   onReconnect,
 }: Props) {
   const [input, setInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamHint, setStreamHint] = useState<string | null>(null);
   const [streamStart, setStreamStart] = useState<number | null>(null);
@@ -213,7 +215,8 @@ export function ChatPanel({
       const response = await sendChatMessageAPI(
         projectId,
         userMessage.content,
-        threadId || undefined
+        threadId || undefined,
+        selectedModel || undefined
       );
       setCurrentTaskId(response.task_id);
       onThreadIdChange(response.thread_id);
@@ -472,7 +475,17 @@ export function ChatPanel({
       </div>
 
       {/* Input */}
-      <div className="p-2">
+      <div className="p-2 space-y-1.5">
+        {/* Model Selector */}
+        <div className="flex items-center gap-1.5">
+          <ChevronDown className="w-3 h-3 text-gray-500 flex-shrink-0" />
+          <ModelSelector
+            value={selectedModel}
+            onChange={setSelectedModel}
+            disabled={isAnyStreaming || disabled}
+            className="h-7 text-xs bg-gray-800 border-gray-700"
+          />
+        </div>
         <div className="flex items-end gap-2 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-gray-600 transition-colors">
           {/* Textarea */}
           <textarea

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { updateProjectAPI, deleteProjectAPI, provisionProjectAPI, reprovisionProjectAPI } from '@/services/project.service'
-import { resetRefactorSessionAPI } from '@/services/agent.service'
+import { resetRefactorSessionAPI, startAgentRunAPI } from '@/services/agent.service'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -12,6 +12,7 @@ import { FileViewer } from '@/components/file/FileViewer'
 import { ProjectSettingsModal } from '@/components/project/ProjectSettingsModal'
 import { ToastContainer } from '@/components/ui/toast'
 import { ProjectStatusBadge } from '@/components/project/ProjectStatusBadge'
+import { StartRefactorDialog } from '@/components/agent/StartRefactorDialog'
 import { ChatSessionList } from '@/components/chat/ChatSessionList'
 import { PanelHeader } from '@/components/layout/PanelHeader'
 import { apiErrorMessage } from '@/utils/apiError'
@@ -145,6 +146,13 @@ export default function ProjectDetailPage() {
     await loadProject()
   }
 
+  const handleStartAgentRun = async (model?: string) => {
+    if (!id) return
+    await startAgentRunAPI(id, model)
+    await loadRuns()
+    toast.success('Agent 重構任務已啟動')
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -254,6 +262,15 @@ export default function ProjectDetailPage() {
                 )}
 
                 {tasks.length === 0 && <div className="flex-1" />}
+
+                {project.status === 'READY' && (
+                  <div className="p-2 border-t border-gray-800">
+                    <StartRefactorDialog
+                      onStart={handleStartAgentRun}
+                      disabled={currentRun?.status === 'RUNNING'}
+                    />
+                  </div>
+                )}
 
                 {needsProvision && (
                   <div className="p-2 space-y-2 border-t border-gray-800">

@@ -23,6 +23,7 @@ class ChatMessageRequest(BaseModel):
     message: str
     thread_id: Optional[str] = None  # 不提供則自動生成
     verbose: bool = True
+    model: Optional[str] = None  # 模型 ID
 
 
 class ChatMessageResponse(BaseModel):
@@ -125,7 +126,8 @@ async def send_chat_message(
                 json={
                     "message": request.message,
                     "thread_id": thread_id,
-                    "verbose": request.verbose
+                    "verbose": request.verbose,
+                    "model": request.model,
                 }
             )
             response.raise_for_status()

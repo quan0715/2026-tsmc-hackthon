@@ -21,7 +21,7 @@ from agent.server.schemas import (
 )
 from agent.server import state
 from agent.server.handlers import execute_agent, execute_chat, log_task
-from agent.models import AnthropicModelProvider
+from agent.model_factory import ModelFactory
 from agent.deep_agent import RefactorAgent
 
 # 配置 logging 輸出到 stdout
@@ -74,7 +74,8 @@ async def chat(request: ChatRequest, background_tasks: BackgroundTasks):
         task_id=task_id,
         thread_id=thread_id,
         message=request.message,
-        verbose=request.verbose
+        verbose=request.verbose,
+        model=request.model,
     )
 
     logger.info(f"[{task_id}] Chat 任務已建立 (thread: {thread_id})")
@@ -102,8 +103,8 @@ async def get_thread_history(thread_id: str):
                 detail="POSTGRES_URL environment variable is not set. PostgreSQL persistence is required."
             )
 
-        provider = AnthropicModelProvider()
-        model = provider.get_model()
+        factory = ModelFactory()
+        model = factory.create_model()
 
         try:
             agent = RefactorAgent(
@@ -155,7 +156,8 @@ async def run_agent(request: RunRequest, background_tasks: BackgroundTasks):
         task_id=task_id,
         spec=request.spec,
         thread_id=thread_id,
-        verbose=request.verbose
+        verbose=request.verbose,
+        model=request.model,
     )
 
     logger.info(f"[{task_id}] 任務已建立 (thread: {thread_id})，開始背景執行")
@@ -346,3 +348,12 @@ async def resume_task(task_id: str, background_tasks: BackgroundTasks):
         "status": TaskStatus.PENDING,
         "message": "Task resumed with new task_id"
     }
+
+
+# === Models Routes ===
+
+@app.get("/models")
+async def list_models():
+    """列出所有可用的 LLM 模型"""
+    from agent.model_config import list_available_models
+    return {"models": list_available_models()}
