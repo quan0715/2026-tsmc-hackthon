@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { createProjectAPI } from '@/services/project.service'
+import { getGitBranchesAPI } from '@/services/git.service'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -16,11 +17,15 @@ export default function CreateProjectPage() {
   const [description, setDescription] = useState('')
   const [repoUrl, setRepoUrl] = useState('')
   const [branch, setBranch] = useState('main')
+  const [branches, setBranches] = useState<string[]>([])
+  const [branchesLoading, setBranchesLoading] = useState(false)
+  const [branchesError, setBranchesError] = useState('')
   const [spec, setSpec] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [urlWarning, setUrlWarning] = useState('')
   const [suggestedUrl, setSuggestedUrl] = useState('')
+  const fetchSeq = useRef(0)
 
   /**
    * 驗證並修正 Git repository URL
@@ -52,6 +57,51 @@ export default function CreateProjectPage() {
     setRepoUrl(value)
     validateAndFixUrl(value)
   }
+
+  useEffect(() => {
+    if (projectType !== ProjectType.REFACTOR) return
+
+    const url = repoUrl.trim()
+    if (!url) {
+      fetchSeq.current += 1
+      setBranches([])
+      setBranchesError('')
+      setBranchesLoading(false)
+      setBranch('main')
+      return
+    }
+
+    const seq = ++fetchSeq.current
+    const timer = setTimeout(async () => {
+      setBranchesLoading(true)
+      setBranchesError('')
+      try {
+        const res = await getGitBranchesAPI(url)
+        if (fetchSeq.current !== seq) return
+
+        setBranches(res.branches || [])
+        setBranch((prev) => {
+          const list = res.branches || []
+          if (list.length === 0) return 'main'
+          if (prev && list.includes(prev)) return prev
+          if (res.default_branch && list.includes(res.default_branch)) return res.default_branch
+          if (list.includes('main')) return 'main'
+          if (list.includes('master')) return 'master'
+          return list[0]
+        })
+      } catch (err: unknown) {
+        if (fetchSeq.current !== seq) return
+        setBranches([])
+        setBranchesError(apiErrorMessage(err, '無法取得分支，請確認 repo URL 是否正確且可存取'))
+        setBranch('main')
+      } finally {
+        if (fetchSeq.current !== seq) return
+        setBranchesLoading(false)
+      }
+    }, 500)
+
+    return () => clearTimeout(timer)
+  }, [repoUrl, projectType])
 
   const handleUseSuggestedUrl = () => {
     if (suggestedUrl) {
@@ -232,15 +282,36 @@ export default function CreateProjectPage() {
                   <label className="block text-sm font-medium mb-2 text-gray-200">
                     分支 *
                   </label>
-                  <Input
-                    placeholder="main"
+                  <select
                     value={branch}
                     onChange={(e) => setBranch(e.target.value)}
                     required
-                  />
+                    disabled={branchesLoading || !repoUrl.trim() || branches.length === 0}
+                    className="flex h-10 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {branchesLoading && <option value={branch || 'main'}>載入分支中...</option>}
+                    {!branchesLoading && branches.length === 0 && (
+                      <option value="main">main</option>
+                    )}
+                    {!branchesLoading &&
+                      branches.map((b) => (
+                        <option key={b} value={b}>
+                          {b}
+                        </option>
+                      ))}
+                  </select>
                   <p className="text-xs text-gray-400 mt-1">
-                    預設為 main 分支
+                    {branchesLoading
+                      ? '正在從 GitHub 取得分支列表...'
+                      : branches.length > 0
+                        ? `共 ${branches.length} 個分支`
+                        : '請先輸入 Repository URL'}
                   </p>
+                  {branchesError && (
+                    <div className="text-xs text-red-400 mt-2 bg-red-900/30 p-2 rounded border border-red-700/50">
+                      {branchesError}
+                    </div>
+                  )}
                 </div>
               )}
 

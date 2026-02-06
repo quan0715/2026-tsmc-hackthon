@@ -6,7 +6,7 @@ import logging
 
 from .config import settings
 from .database.mongodb import mongodb
-from .routers import health, projects, auth, agent, chat
+from .routers import health, projects, auth, agent, chat, git
 
 # 配置日誌
 logging.basicConfig(
@@ -53,6 +53,7 @@ app.add_middleware(
 # 註冊路由
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(git.router)
 app.include_router(projects.router)
 app.include_router(agent.router)
 app.include_router(chat.router)

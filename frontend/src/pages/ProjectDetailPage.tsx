@@ -1,10 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { updateProjectAPI, deleteProjectAPI, provisionProjectAPI, reprovisionProjectAPI } from '@/services/project.service'
-import {
-  stopAgentRunAPI,
-  resetRefactorSessionAPI,
-} from '@/services/agent.service'
+import { resetRefactorSessionAPI } from '@/services/agent.service'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
 import { ErrorState } from '@/components/ui/ErrorState'
@@ -13,7 +10,7 @@ import { TaskList, type Task } from '@/components/agent/TaskList'
 import { FileTree } from '@/components/file/FileTree'
 import { FileViewer } from '@/components/file/FileViewer'
 import { ProjectSettingsModal } from '@/components/project/ProjectSettingsModal'
-import { AgentRunStatus } from '@/types/agent.types'
+import { ToastContainer } from '@/components/ui/toast'
 import { ProjectStatusBadge } from '@/components/project/ProjectStatusBadge'
 import { ChatSessionList } from '@/components/chat/ChatSessionList'
 import { PanelHeader } from '@/components/layout/PanelHeader'
@@ -22,8 +19,8 @@ import { useProject } from '@/hooks/useProject'
 import { useAgentRuns } from '@/hooks/useAgentRuns'
 import { useFileTree } from '@/hooks/useFileTree'
 import { useChatSessions } from '@/hooks/useChatSessions'
+import { useToast } from '@/hooks/useToast'
 import {
-  Square,
   Settings,
   ArrowLeft,
   Loader2,
@@ -34,7 +31,7 @@ import {
   PanelRightOpen,
   GripVertical,
 } from 'lucide-react'
-import { Group, Panel, Separator } from 'react-resizable-panels'
+import { Panel, Group, Separator } from 'react-resizable-panels'
 
 export default function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -43,7 +40,7 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true)
 
   const { project, error, loadProject } = useProject(id)
-  const { currentRun, setCurrentRun, runtime, loadRuns } = useAgentRuns(id)
+  const { currentRun, runtime, loadRuns } = useAgentRuns(id)
   const {
     fileTree,
     openFiles,
@@ -68,18 +65,25 @@ export default function ProjectDetailPage() {
     startNewChat,
   } = useChatSessions(id)
 
+  // Toast notifications
+  const toast = useToast()
+
   // Task state
   const [tasks, setTasks] = useState<Task[]>([])
 
   // UI state
   const [showSettings, setShowSettings] = useState(false)
-  const [isStopping, setIsStopping] = useState(false)
   const [isProvisioning, setIsProvisioning] = useState(false)
   const [dialog, setDialog] = useState<{ title: string; message: string } | null>(null)
 
   // Panel collapse state (only left and right panels can collapse)
   const [infoCollapsed, setInfoCollapsed] = useState(false)
   const [treeCollapsed, setTreeCollapsed] = useState(false)
+
+  // 處理 Agent Run 重連（使用 useCallback 避免重複渲染）
+  const handleAgentReconnect = useCallback(() => {
+    toast.info('偵測到執行中的任務，正在重新連線...')
+  }, [toast.info])
 
   // Initial load
   useEffect(() => {
@@ -112,24 +116,6 @@ export default function ProjectDetailPage() {
       setDialog({ title: 'Provision failed', message: apiErrorMessage(err, 'Provision failed') })
     } finally {
       setIsProvisioning(false)
-    }
-  }
-
-  const handleStopAgent = async () => {
-    if (!id || !currentRun) return
-    if (!confirm('確定要停止重構嗎？')) return
-    setIsStopping(true)
-    try {
-      await stopAgentRunAPI(id, currentRun.id)
-      setCurrentRun({ ...currentRun, status: AgentRunStatus.STOPPED })
-      setTimeout(async () => {
-        await loadRuns()
-        await loadProject()
-      }, 2000)
-    } catch (err: unknown) {
-      setDialog({ title: 'Failed to stop', message: apiErrorMessage(err, 'Failed to stop') })
-    } finally {
-      setIsStopping(false)
     }
   }
 
@@ -181,7 +167,6 @@ export default function ProjectDetailPage() {
   }
 
   const projectName = project.title || project.repo_url?.split('/').pop()?.replace('.git', '') || 'Project'
-  const isRunning = currentRun?.status === 'RUNNING'
   const needsProvision = project.status === 'CREATED' || project.status === 'FAILED'
 
   return (
@@ -270,19 +255,12 @@ export default function ProjectDetailPage() {
 
                 {tasks.length === 0 && <div className="flex-1" />}
 
-                {(needsProvision || isRunning) && (
+                {needsProvision && (
                   <div className="p-2 space-y-2 border-t border-gray-800">
-                    {needsProvision ? (
-                      <Button className="w-full" size="sm" onClick={handleProvision} disabled={isProvisioning}>
-                        {isProvisioning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
-                        Provision
-                      </Button>
-                    ) : isRunning ? (
-                      <Button className="w-full" size="sm" variant="destructive" onClick={handleStopAgent} disabled={isStopping}>
-                        {isStopping ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Square className="w-4 h-4 mr-1" />}
-                        Stop
-                      </Button>
-                    ) : null}
+                    <Button className="w-full" size="sm" onClick={handleProvision} disabled={isProvisioning}>
+                      {isProvisioning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
+                      Provision
+                    </Button>
                   </div>
                 )}
               </div>
@@ -308,6 +286,8 @@ export default function ProjectDetailPage() {
                 loadingHistory={chatLoadingHistory}
                 disabled={project.status !== 'READY'}
                 onTasksUpdate={setTasks}
+                currentRun={currentRun}
+                onReconnect={handleAgentReconnect}
               />
             </div>
           </div>
@@ -367,6 +347,9 @@ export default function ProjectDetailPage() {
           </Panel>
         )}
       </Group>
+
+      {/* Toast Container */}
+      <ToastContainer toasts={toast.toasts} />
 
       {/* Settings Modal */}
       <ProjectSettingsModal
