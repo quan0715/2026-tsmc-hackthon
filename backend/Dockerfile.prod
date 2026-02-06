@@ -40,8 +40,10 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 # Runtime needs git for /api/v1/git/branches and CA certs for HTTPS.
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update && apt-get install -y --no-install-recommends \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     git ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
