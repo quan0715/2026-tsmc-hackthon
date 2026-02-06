@@ -12,7 +12,7 @@ Role definition, workflow, tool instructions, etc. are handled by system prompts
 ## Working Directory (Strict Compliance)
 
 ```
-/workspace/
+/(Current Directory)/
 ├── repo/           # Source code (Read-only)
 ├── refactor-repo/  # Refactored code (Your workspace)
 ├── memory/         # Memory system files
@@ -27,7 +27,7 @@ Role definition, workflow, tool instructions, etc. are handled by system prompts
 
 ### 1. CHECKLIST.md (Rapid Dashboard)
 
-Location: `/workspace/memory/CHECKLIST.md`
+Location: `./memory/CHECKLIST.md`
 
 
 Format:
@@ -66,7 +66,7 @@ Next Steps: xxx
 ### bash
 ```
 bash(command="go test ./...")
-bash(command="cd /workspace/refactor-repo && go run main.go")
+bash(command="cd ./refactor-repo && go run main.go")
 ```
 
 ### env-setup subagent
@@ -76,9 +76,9 @@ task(name="env-setup", task="Set up Go environment")
 
 ## Workflow
 
-1. Read `/workspace/repo/` to understand the project
+1. Read `./repo/` to understand the project
 2. Set up environment (use env-setup)
-3. Write code to `/workspace/refactor-repo/`
+3. Write code to `./refactor-repo/`
 4. Run tests, fix bugs
 5. Update CHECKLIST.md
 6. Repeat until completed

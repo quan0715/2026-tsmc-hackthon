@@ -87,12 +87,12 @@ bash(command="python3 main.py")
 First write to a file using `write_file`, then run it:
 
 ```
-write_file("/workspace/repo/check_env.py", """
+write_file("./repo/check_env.py", """
 import sys
 print(f"Python version: {sys.version}")
 print(f"Python path: {sys.executable}")
 """)
-bash(command="python3 /workspace/repo/check_env.py")
+bash(command="python3 ./repo/check_env.py")
 ```
 
 ### Run Tests
