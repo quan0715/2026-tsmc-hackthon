@@ -63,6 +63,12 @@ class ContainerService:
             # 傳遞 ANTHROPIC_API_KEY（如果有設定）
             if hasattr(settings, 'anthropic_api_key') and settings.anthropic_api_key:
                 env_vars.extend(["-e", f"ANTHROPIC_API_KEY={settings.anthropic_api_key}"])
+            else:
+                logger.warning(
+                    "⚠️ ANTHROPIC_API_KEY not configured. "
+                    "Anthropic models will NOT be available in project containers. "
+                    "Please configure ANTHROPIC_API_KEY in GitHub Secrets or backend/.env"
+                )
 
             # 傳遞 POSTGRES_URL（用於 LangGraph 持久化 - 必填）
             if not settings.postgres_url:
@@ -78,9 +84,9 @@ class ContainerService:
                 env_vars.extend(["-e", f"GCP_PROJECT_ID={settings.gcp_project_id}"])
                 logger.info(f"容器將使用 GCP Project: {settings.gcp_project_id}")
 
-            # 掛載 GCP Service Account credentials
-            # GOOGLE_APPLICATION_CREDENTIALS 是 API 容器內路徑（如 /app/gcp-credentials.json）
-            # 複製到 DOCKER_VOLUME_PREFIX（宿主機路徑）後掛載給 project 容器
+            # 掛載 GCP credentials
+            # 1) 若有 GOOGLE_APPLICATION_CREDENTIALS，沿用指定路徑
+            # 2) 否則嘗試使用 ADC（API 容器內 /root/.config/gcloud/application_default_credentials.json）
             if settings.google_application_credentials:
                 src_path = settings.google_application_credentials
                 if os.path.exists(src_path):
@@ -91,9 +97,19 @@ class ContainerService:
                     container_creds_path = "/workspace/credentials/gcp-credentials.json"
                     volume_args.extend(["-v", f"{host_creds_path}:{container_creds_path}:ro"])
                     env_vars.extend(["-e", f"GOOGLE_APPLICATION_CREDENTIALS={container_creds_path}"])
-                    logger.info("容器將掛載 GCP credentials")
+                    logger.info("容器將掛載 GCP credentials (explicit)")
                 else:
                     logger.warning(f"GCP credentials 檔案不存在: {src_path}")
+            else:
+                adc_path = "/root/.config/gcloud/application_default_credentials.json"
+                if os.path.exists(adc_path):
+                    import shutil
+                    host_creds_path = f"{settings.docker_volume_prefix}/adc-credentials.json"
+                    os.makedirs(settings.docker_volume_prefix, exist_ok=True)
+                    shutil.copy2(adc_path, host_creds_path)
+                    container_creds_path = "/root/.config/gcloud/application_default_credentials.json"
+                    volume_args.extend(["-v", f"{host_creds_path}:{container_creds_path}:ro"])
+                    logger.info("容器將使用 ADC credentials")
 
             # 建立容器
             cmd = [

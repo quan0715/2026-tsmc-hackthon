@@ -9,7 +9,8 @@ WORKDIR /app
 COPY frontend/package*.json ./
 
 # 安裝依賴（包含 build 所需的 devDependencies）
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --cache /root/.npm
 
 # 建置時注入 API Base URL（Vite 會在 build 時讀取）
 # 空字串表示使用相對路徑，通過 Nginx 反向代理

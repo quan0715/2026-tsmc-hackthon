@@ -27,6 +27,8 @@ Push to main → CI 測試 → Build 映像 → Push to GAR → 自動部署到 
 | Secret 名稱 | 說明 | 必填 |
 |-----------|------|------|
 | **GCP_SA_KEY** | GCP Service Account JSON Key | ✅ |
+| **ANTHROPIC_API_KEY** | Anthropic API Key (Claude 模型) | ✅ |
+| **JWT_SECRET_KEY** | JWT 加密密鑰 (可選，自動生成) | ❌ |
 
 ### Repository Variables（公開變數）
 
