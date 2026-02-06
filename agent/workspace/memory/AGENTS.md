@@ -1,68 +1,68 @@
-此檔案由 Agent 在執行過程中維護，用於跨迭代保留關鍵上下文。
-角色定義、工作流程、工具說明等由系統提示負責，此處不重複。
+This file is maintained by the Agent during execution to preserve key context across iterations.
+Role definition, workflow, tool instructions, etc. are handled by system prompts and are not repeated here.
 
-## 專案上下文
-- 原始語言:
-- 目標語言:
-- 測試命令:
-- 運行命令:
-- 特殊注意事項:
+## Project Context
+- Source Language:
+- Target Language:
+- Test Command:
+- Run Command:
+- Special Notes:
 
 
-## 工作目錄（嚴格遵守）
+## Working Directory (Strict Compliance)
 
 ```
 /workspace/
-├── repo/           # 原始碼（只讀）
-├── refactor-repo/  # 重構碼（你的工作區）
-├── memory/         # 記憶系統文件
-│   ├── AGENTS.md      # 你的角色定義（只讀參考）
-│   ├── CHECKLIST.md   # 快速進度清單（每輪必更新）
-│   ├── plan.md        # 詳細重構計劃（每輪必更新）
-│   └── learnings.md   # 錯誤模式知識庫（可選）
-└── artifacts/      # 最終產出
-
+├── repo/           # Source code (Read-only)
+├── refactor-repo/  # Refactored code (Your workspace)
+├── memory/         # Memory system files
+│   ├── AGENTS.md      # Your role definition (Read-only reference)
+│   ├── CHECKLIST.md   # Rapid progress checklist (Must update every iteration)
+│   ├── plan.md        # Detailed refactor plan (Must update every iteration)
+│   └── learnings.md   # Error pattern knowledge base (Optional)
+│   └── status.json    # Stores iteration and phase status
+└── artifacts/      # Final outputs
 ```
 
-## 記憶系統文件
+## Memory Files
 
-### 1. CHECKLIST.md（快速儀表板）
+### 1. CHECKLIST.md (Rapid Dashboard)
 
-位置：`/workspace/memory/CHECKLIST.md`
+Location: `/workspace/memory/CHECKLIST.md`
 
 
-格式：
+Format:
 ```markdown
-# 重構 Checklist
+# Refactoring Checklist
 
-## 目標
-[一句話描述重構目標]
+## Goal
+[One sentence describing the refactoring goal]
 
-## 環境
-- 原始語言: xxx
-- 目標語言: xxx
-- 測試命令: `xxx`
-- 運行命令: `xxx`
+## Environment
+- Source Language: xxx
+- Target Language: xxx
+- Test Command: `xxx`
+- Run Command: `xxx`
 
-## 進度
-- [x] 環境設置完成
-- [x] 已完成項目
-- [ ] 待完成項目
+## Progress
+- [x] Environment setup complete
+- [x] Completed items
+- [ ] Items to be completed
 
-## 本輪迭代
-完成: xxx
-問題: xxx（如有）
-下一步: xxx
+## Current Iteration
+Completed: xxx
+Issues: xxx (if any)
+Next Steps: xxx
 ```
 
-**不需要：**
-- 時間估計
-- 詳細計劃表
-- 架構設計文檔
-- 多個分析報告
-- 超過上述 3 個文件以外的文
+**NOT Required:**
+- Time estimates
+- Detailed schedule
+- Architectural design documents
+- Multiple analysis reports
+- Documents other than the 3 mentioned above
 
-## 工具
+## Tools
 
 ### bash
 ```
@@ -72,14 +72,14 @@ bash(command="cd /workspace/refactor-repo && go run main.go")
 
 ### env-setup subagent
 ```
-task(name="env-setup", task="設置 Go 環境")
+task(name="env-setup", task="Set up Go environment")
 ```
 
-## 工作流程
+## Workflow
 
-1. 讀取 `/workspace/repo/` 了解專案
-2. 設置環境（用 env-setup）
-3. 寫代碼到 `/workspace/refactor-repo/`
-4. 跑測試，修 bug
-5. 更新 CHECKLIST.md
-6. 重複直到完成
+1. Read `/workspace/repo/` to understand the project
+2. Set up environment (use env-setup)
+3. Write code to `/workspace/refactor-repo/`
+4. Run tests, fix bugs
+5. Update CHECKLIST.md
+6. Repeat until completed
