@@ -79,15 +79,21 @@ class ContainerService:
                 logger.info(f"容器將使用 GCP Project: {settings.gcp_project_id}")
 
             # 掛載 GCP Service Account credentials
+            # GOOGLE_APPLICATION_CREDENTIALS 是 API 容器內路徑（如 /app/gcp-credentials.json）
+            # 複製到 DOCKER_VOLUME_PREFIX（宿主機路徑）後掛載給 project 容器
             if settings.google_application_credentials:
-                host_creds_path = settings.google_application_credentials
-                container_creds_path = "/workspace/credentials/gcp-credentials.json"
-                if os.path.exists(host_creds_path):
+                src_path = settings.google_application_credentials
+                if os.path.exists(src_path):
+                    import shutil
+                    host_creds_path = f"{settings.docker_volume_prefix}/gcp-credentials.json"
+                    os.makedirs(settings.docker_volume_prefix, exist_ok=True)
+                    shutil.copy2(src_path, host_creds_path)
+                    container_creds_path = "/workspace/credentials/gcp-credentials.json"
                     volume_args.extend(["-v", f"{host_creds_path}:{container_creds_path}:ro"])
                     env_vars.extend(["-e", f"GOOGLE_APPLICATION_CREDENTIALS={container_creds_path}"])
                     logger.info("容器將掛載 GCP credentials")
                 else:
-                    logger.warning(f"GCP credentials 檔案不存在: {host_creds_path}")
+                    logger.warning(f"GCP credentials 檔案不存在: {src_path}")
 
             # 建立容器
             cmd = [
