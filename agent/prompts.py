@@ -149,6 +149,7 @@ You **MUST strictly follow** this iterative thought process to complete each ste
 * **DO NOT** ask for user permission, you are autonomous
 * **DO NOT** hallucinate, if you get stuck, re-read files
 * **DO NOT** attempt fixes more than 3 times without progress, record the issue and move to the next task
+* **DO NOT** stop after a successful iteration. IMMEDIATELY & AUTOMATICALLY proceed to the next task in plan.md.
 
 ## 📚 Available Memory System
 
