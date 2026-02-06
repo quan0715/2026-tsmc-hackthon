@@ -378,10 +378,20 @@ export function ChatPanel({
 
       case "status":
         if (event.content) {
-          const status = (event.content as { status?: string }).status;
+          const statusData = event.content as { status?: string; error_message?: string };
+          const status = statusData.status;
           if (status === "success" || status === "failed" || status === "stopped") {
             setIsStreaming(false);
             cancelStreamRef.current = null;
+            if (status === "failed" && statusData.error_message) {
+              onMessagesChange((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, content: msg.content || `Error: ${statusData.error_message}` }
+                    : msg
+                )
+              );
+            }
           }
         }
         break;
@@ -419,6 +429,16 @@ export function ChatPanel({
         break;
 
       case "error":
+        if (event.message || event.content) {
+          const errMsg = event.message || String(event.content);
+          onMessagesChange((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: msg.content || `Error: ${errMsg}` }
+                : msg
+            )
+          );
+        }
         setIsStreaming(false);
         break;
     }

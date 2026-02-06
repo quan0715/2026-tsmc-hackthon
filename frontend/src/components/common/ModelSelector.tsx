@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { getAvailableModelsAPI } from '@/services/models.service'
 import type { ModelInfo } from '@/types/model.types'
 import { ChevronDown } from 'lucide-react'
@@ -47,6 +47,17 @@ export function ModelSelector({ value, onChange, disabled }: Props) {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [open])
 
+  // Group models by provider
+  const grouped = useMemo(() => {
+    const groups: Record<string, ModelInfo[]> = {}
+    for (const m of models) {
+      const p = m.provider || 'Other'
+      if (!groups[p]) groups[p] = []
+      groups[p].push(m)
+    }
+    return groups
+  }, [models])
+
   const selected = models.find((m) => m.id === value)
   const displayName = loading ? '...' : selected?.display_name || 'Select model'
 
@@ -64,21 +75,28 @@ export function ModelSelector({ value, onChange, disabled }: Props) {
 
       {open && (
         <div className="absolute bottom-full left-0 mb-1 w-72 max-h-80 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
-          {models.map((model) => (
-            <button
-              key={model.id}
-              type="button"
-              onClick={() => {
-                onChange(model.id)
-                setOpen(false)
-              }}
-              className={`w-full text-left px-3 py-2 hover:bg-gray-700/60 transition-colors ${
-                model.id === value ? 'bg-gray-700/40' : ''
-              }`}
-            >
-              <div className="text-xs font-medium text-gray-200">{model.display_name}</div>
-              <div className="text-[10px] text-gray-500 mt-0.5">{model.description}</div>
-            </button>
+          {Object.entries(grouped).map(([provider, providerModels]) => (
+            <div key={provider}>
+              <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-800">
+                {provider}
+              </div>
+              {providerModels.map((model) => (
+                <button
+                  key={model.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(model.id)
+                    setOpen(false)
+                  }}
+                  className={`w-full text-left px-3 py-1.5 hover:bg-gray-700/60 transition-colors ${
+                    model.id === value ? 'bg-gray-700/40' : ''
+                  }`}
+                >
+                  <div className="text-xs font-medium text-gray-200">{model.display_name}</div>
+                  <div className="text-[10px] text-gray-500 mt-0.5">{model.description}</div>
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}
