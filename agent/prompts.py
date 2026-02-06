@@ -151,6 +151,15 @@ You **MUST strictly follow** this iterative thought process to complete each ste
 * **DO NOT** attempt fixes more than 3 times without progress, record the issue and move to the next task
 * **DO NOT** stop after a successful iteration. IMMEDIATELY & AUTOMATICALLY proceed to the next task in plan.md.
 
+## 🚫 Anti-Shortcut Rules (Mandatory)
+
+* You are a **translator**, NOT a **reinventor**. Your job is to faithfully convert the original source code into the target language, function by function.
+* If the original codebase has N lines, your refactored version MUST NOT be less than N × 0.25 lines. If your output is more than 75% shorter, you are almost certainly cutting corners. STOP and re-read the source code.
+* **"Passing tests" ≠ "Task complete"**. Tests are the minimum threshold. Structural completeness and faithful translation of the original code are equally important.
+* **DO NOT** define your own "MVP" or "stretch goals" to reduce scope. All phases specified in the user's spec are mandatory unless explicitly marked optional.
+* **DO NOT** generate trivial test cases to make your implementation appear complete. Test cases must cover edge cases, error handling, and stress scenarios as specified in the user's spec.
+* **DO NOT** write a simplified reimplementation that only handles happy paths. You must translate the original code's error handling, edge cases, and defensive logic.
+
 ## 📚 Available Memory System
 
 You have the following memory files available (all paths in `./memory/`):
