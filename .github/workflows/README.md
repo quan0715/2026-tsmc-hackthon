@@ -289,11 +289,11 @@ gh pr create --base main
 
 **檔案**: `deploy-gce.yml`
 
-**目的**: 自動部署到 Google Compute Engine 生產環境
+**目的**: 自動部署到 Google Compute Engine
 
 **觸發條件**:
 - ✅ CI/CD Pipeline 成功完成（自動）
-- ✅ 手動觸發（可選擇環境）
+- ✅ 手動觸發
 
 **部署流程**:
 1. 認證到 GCP
@@ -302,17 +302,13 @@ gh pr create --base main
 4. 更新 Docker Compose 服務
 5. 健康檢查
 
-**環境支援**:
-- Production（預設）
-- Staging（可選）
-
-**詳細設定說明**: 請參閱 [GCE 部署設定指南](./DEPLOY_SETUP.md)
+**詳細設定說明**: 請參閱 [GCE 部署完整指南](./GCE_DEPLOY.md)
 
 ---
 
 ## 相關文檔
 
-- [GCE 部署設定指南](./DEPLOY_SETUP.md)
+- [GCE 部署完整指南](./GCE_DEPLOY.md)
 - [Docker Compose 配置](../../devops/docker-compose.yml)
 - [Backend 測試指南](../../backend/tests/QUICK_START.md)
 - [Frontend 測試配置](../../frontend/vitest.config.ts)

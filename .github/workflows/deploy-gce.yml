@@ -2,15 +2,6 @@ name: Deploy to GCE
 
 on:
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment environment'
-        required: true
-        default: 'production'
-        type: choice
-        options:
-          - production
-          - staging
   workflow_run:
     workflows: ["CI/CD Pipeline"]
     types:
@@ -39,12 +30,9 @@ jobs:
 
       - name: Set environment variables
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "DEPLOY_ENV=${{ github.event.inputs.environment }}" >> $GITHUB_ENV
-          else
-            echo "DEPLOY_ENV=production" >> $GITHUB_ENV
-          fi
           echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "GCE_INSTANCE=${{ vars.GCE_INSTANCE }}" >> $GITHUB_ENV
+          echo "GCE_ZONE=${{ vars.GCE_ZONE }}" >> $GITHUB_ENV
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -54,22 +42,11 @@ jobs:
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure environment-specific variables
-        run: |
-          if [ "${{ env.DEPLOY_ENV }}" == "production" ]; then
-            echo "GCE_INSTANCE=${{ vars.GCE_INSTANCE_PROD }}" >> $GITHUB_ENV
-            echo "GCE_ZONE=${{ vars.GCE_ZONE_PROD }}" >> $GITHUB_ENV
-          else
-            echo "GCE_INSTANCE=${{ vars.GCE_INSTANCE_STAGING }}" >> $GITHUB_ENV
-            echo "GCE_ZONE=${{ vars.GCE_ZONE_STAGING }}" >> $GITHUB_ENV
-          fi
-
       - name: Deploy to GCE
         run: |
           echo "============================================"
           echo "🚀 Deploying to GCE"
           echo "============================================"
-          echo "Environment: ${{ env.DEPLOY_ENV }}"
           echo "Instance: ${{ env.GCE_INSTANCE }}"
           echo "Zone: ${{ env.GCE_ZONE }}"
           echo "Image Tag: ${{ env.IMAGE_TAG }}"
@@ -157,7 +134,6 @@ jobs:
           echo "============================================"
           echo "✅ Deployment Summary"
           echo "============================================"
-          echo "Environment: ${{ env.DEPLOY_ENV }}"
           echo "Instance: ${{ env.GCE_INSTANCE }}"
           echo "Image Tag: ${{ env.IMAGE_TAG }}"
           echo "Deployed Images:"
