@@ -95,7 +95,7 @@ bash(command="go run ./cmd/server")
 First write to a file using `write_file`, then run it:
 
 ```
-write_file("/workspace/repo/hello.go", """
+write_file("./repo/hello.go", """
 package main
 
 import "fmt"
@@ -104,7 +104,7 @@ func main() {
     fmt.Println("Hello, Go!")
 }
 """)
-bash(command="go run /workspace/repo/hello.go")
+bash(command="go run ./repo/hello.go")
 ```
 
 ## Compilation
@@ -181,7 +181,7 @@ bash(command="go get -u github.com/gin-gonic/gin")
 Create a simple Gin web server:
 
 ```
-write_file("/workspace/repo/main.go", """
+write_file("./repo/main.go", """
 package main
 
 import (

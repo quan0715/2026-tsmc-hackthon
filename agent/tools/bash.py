@@ -12,7 +12,7 @@ from agent.registry import register_tool
 
 # 全域 bash 會話狀態（模擬持久會話）
 _session_state = {
-    "cwd": "/workspace/repo",
+    "cwd": ".",
     "env": {},
 }
 
@@ -23,7 +23,7 @@ BASH_DESCRIPTION = """
 
 範例：
 - `bash(command="go test ./...")`
-- `bash(command="cd /workspace/refactor-repo && go run main.go")`
+- `bash(command="cd ./refactor-repo && go run main.go")`
 - `bash(restart=True)` 重置會話
 """.strip()
 
@@ -97,7 +97,7 @@ def bash(
     # 處理重啟請求
     if restart:
         _session_state = {
-            "cwd": "/workspace/repo",
+            "cwd": ".",
             "env": {},
         }
         cwd = _session_state['cwd']
