@@ -3,6 +3,14 @@ import { http, HttpResponse } from 'msw'
 const API_BASE_URL = 'http://localhost:8000'
 
 export const handlers = [
+  http.get(`${API_BASE_URL}/api/v1/git/branches`, () => {
+    return HttpResponse.json({
+      repo_url: 'https://github.com/example/repo.git',
+      branches: ['main', 'dev'],
+      default_branch: 'main',
+    })
+  }),
+
   http.get(`${API_BASE_URL}/api/v1/projects/:projectId`, ({ params }) => {
     const { projectId } = params
     return HttpResponse.json({
