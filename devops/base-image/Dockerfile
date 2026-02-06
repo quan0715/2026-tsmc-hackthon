@@ -9,6 +9,11 @@ FROM python:3.11-slim AS dependencies
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_PYTHON_VERSION_WARNING=1
 
+# Rust toolchain (1.7x)
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
 # 只安裝 runtime 必要的系統套件與工具鏈
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
@@ -31,6 +36,9 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
       postgresql-client \
       nodejs \
       npm \
+    && curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.74.1 \
+    && rustc --version \
+    && cargo --version \
     && rm -rf /var/lib/apt/lists/*
 
 # 先複製 requirements.txt（這層變動頻率低，cache 命中率高）
