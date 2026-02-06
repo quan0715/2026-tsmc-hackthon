@@ -270,8 +270,16 @@ jobs:
               driver: bridge
           EOF
 
-              # 停止並移除舊容器
-              compose --project-name refactor -f docker-compose.prod.yml down --remove-orphans
+              # 停止並移除舊容器（強制清理所有 refactor-* 容器）
+              compose --project-name refactor -f docker-compose.prod.yml down --remove-orphans || true
+
+              # 額外清理：移除可能殘留的容器
+              for container in refactor-postgres refactor-mongodb refactor-api refactor-frontend; do
+                if docker ps -a --filter "name=^/${container}$" --format '{{.Names}}' | grep -q "^${container}$"; then
+                  echo "🧹 Removing orphan container: ${container}"
+                  docker rm -f "${container}" || true
+                fi
+              done
 
               # 啟動新容器
               compose --project-name refactor -f docker-compose.prod.yml up -d
