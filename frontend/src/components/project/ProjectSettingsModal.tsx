@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Save, Trash2, RefreshCw, RotateCcw } from 'lucide-react'
+import { X, Save, Trash2, RefreshCw, RotateCcw, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -13,6 +13,7 @@ interface ProjectSettingsModalProps {
   onDelete: () => Promise<void>
   onReprovision: () => Promise<void>
   onResetSession: () => Promise<void>
+  onExport: () => Promise<void>
 }
 
 export function ProjectSettingsModal({
@@ -23,11 +24,13 @@ export function ProjectSettingsModal({
   onDelete,
   onReprovision,
   onResetSession,
+  onExport,
 }: ProjectSettingsModalProps) {
   const [title, setTitle] = useState(project.title || '')
   const [description, setDescription] = useState(project.description || '')
   const [spec, setSpec] = useState(project.spec || '')
   const [isSaving, setIsSaving] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [activeTab, setActiveTab] = useState<'general' | 'danger'>('general')
 
   useEffect(() => {
@@ -65,6 +68,15 @@ export function ProjectSettingsModal({
     if (confirm('確定要重置重構會話嗎？這將清除所有對話歷史。')) {
       await onResetSession()
       onClose()
+    }
+  }
+
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      await onExport()
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -141,6 +153,22 @@ export function ProjectSettingsModal({
                   placeholder="重構規格說明..."
                   rows={6}
                 />
+              </div>
+
+              <div className="p-4 bg-gray-800 border border-gray-700 rounded-lg">
+                <h3 className="text-sm font-medium mb-2">匯出 Workspace</h3>
+                <p className="text-xs text-gray-400 mb-3">
+                  下載整個 workspace 的內容為壓縮檔案 (tar.gz)
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExport}
+                  disabled={isExporting || !project.container_id}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  {isExporting ? '匯出中...' : '匯出 Workspace'}
+                </Button>
               </div>
             </div>
           )}

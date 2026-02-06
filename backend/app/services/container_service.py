@@ -494,25 +494,25 @@ class ContainerService:
         max_size: int = 1024 * 1024  # 1MB 限制
     ) -> Dict[str, Any]:
         """讀取容器中的檔案內容
-        
+
         Args:
             container_id: 容器 ID
             file_path: 檔案路徑（相對於 /workspace 或絕對路徑）
             max_size: 最大讀取大小（bytes）
-        
+
         Returns:
             包含 path, content, size 的字典
         """
         # 確保路徑安全
         if '..' in file_path:
             raise ValueError("路徑不能包含 ..")
-        
+
         # 如果不是絕對路徑，加上 /workspace 前綴
         if not file_path.startswith('/'):
             full_path = f"/workspace/{file_path}"
         else:
             full_path = file_path
-        
+
         try:
             # 先檢查檔案大小
             size_cmd = f"stat -c %s '{full_path}' 2>/dev/null || echo 0"
@@ -522,16 +522,16 @@ class ContainerService:
                 text=True,
                 timeout=10
             )
-            
+
             file_size = int(size_result.stdout.strip() or 0)
-            
+
             if file_size == 0:
                 # 檔案不存在或為空
                 raise FileNotFoundError(f"檔案不存在或為空: {full_path}")
-            
+
             if file_size > max_size:
                 raise ValueError(f"檔案過大: {file_size} bytes (最大 {max_size} bytes)")
-            
+
             # 讀取檔案內容
             read_cmd = f"cat '{full_path}'"
             result = subprocess.run(
@@ -540,16 +540,16 @@ class ContainerService:
                 text=True,
                 timeout=30
             )
-            
+
             if result.returncode != 0:
                 raise FileNotFoundError(f"無法讀取檔案: {result.stderr}")
-            
+
             return {
                 "path": file_path,
                 "content": result.stdout,
                 "size": file_size
             }
-            
+
         except subprocess.TimeoutExpired:
             logger.error(f"讀取檔案超時: {full_path}")
             raise Exception("讀取檔案超時")
@@ -557,4 +557,58 @@ class ContainerService:
             raise
         except Exception as e:
             logger.error(f"讀取檔案失敗: {e}")
+            raise
+
+    def export_workspace(
+        self,
+        container_id: str,
+        exclude_patterns: list = None
+    ) -> bytes:
+        """匯出容器中的 workspace 目錄為 tar.gz 檔案
+
+        Args:
+            container_id: 容器 ID
+            exclude_patterns: 要排除的路徑模式列表（相對於 /workspace）
+
+        Returns:
+            tar.gz 檔案的二進位內容
+        """
+        if exclude_patterns is None:
+            exclude_patterns = ["agent"]  # 排除 agent 目錄
+
+        try:
+            # 建構 tar 排除參數
+            exclude_args = " ".join([f"--exclude='{p}'" for p in exclude_patterns])
+
+            # 使用 tar 打包 workspace 目錄，排除指定目錄，並輸出到 stdout
+            # -C /workspace: 切換到 /workspace 目錄
+            # -czf -: 建立 gzip 壓縮的 tar 檔案並輸出到 stdout
+            # .: 打包當前目錄下的所有內容
+            tar_cmd = f"tar -C /workspace {exclude_args} -czf - ."
+
+            logger.info(f"匯出 workspace: container_id={container_id}, exclude={exclude_patterns}")
+
+            result = subprocess.run(
+                ["docker", "exec", container_id, "sh", "-c", tar_cmd],
+                capture_output=True,
+                timeout=300  # 5 分鐘超時
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr.decode('utf-8') if result.stderr else "未知錯誤"
+                logger.error(f"匯出 workspace 失敗: {error_msg}")
+                raise Exception(f"匯出失敗: {error_msg}")
+
+            # 檢查是否有輸出
+            if not result.stdout:
+                raise Exception("匯出檔案為空")
+
+            logger.info(f"成功匯出 workspace: size={len(result.stdout)} bytes")
+            return result.stdout
+
+        except subprocess.TimeoutExpired:
+            logger.error("匯出 workspace 超時")
+            raise Exception("匯出超時（5 分鐘）")
+        except Exception as e:
+            logger.error(f"匯出 workspace 失敗: {e}")
             raise
