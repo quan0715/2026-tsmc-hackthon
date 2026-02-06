@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { updateProjectAPI, deleteProjectAPI, provisionProjectAPI, reprovisionProjectAPI } from '@/services/project.service'
+import { updateProjectAPI, deleteProjectAPI, provisionProjectAPI, reprovisionProjectAPI, exportWorkspaceAPI } from '@/services/project.service'
 import { resetRefactorSessionAPI } from '@/services/agent.service'
 import { Button } from '@/components/ui/button'
 import { Dialog } from '@/components/ui/dialog'
@@ -30,6 +30,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
   GripVertical,
+  Download,
 } from 'lucide-react'
 import { Panel, Group, Separator } from 'react-resizable-panels'
 
@@ -74,6 +75,7 @@ export default function ProjectDetailPage() {
   // UI state
   const [showSettings, setShowSettings] = useState(false)
   const [isProvisioning, setIsProvisioning] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
   const [dialog, setDialog] = useState<{ title: string; message: string } | null>(null)
 
   // Panel collapse state (only left and right panels can collapse)
@@ -145,6 +147,19 @@ export default function ProjectDetailPage() {
     await loadProject()
   }
 
+  const handleExport = async () => {
+    if (!id) return
+    setIsExporting(true)
+    try {
+      await exportWorkspaceAPI(id, projectName)
+      toast.success('匯出成功')
+    } catch (err: unknown) {
+      toast.error(apiErrorMessage(err, '匯出失敗'))
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   // Loading state
   if (loading) {
     return (
@@ -194,6 +209,20 @@ export default function ProjectDetailPage() {
           <ProjectStatusBadge status={project.status} />
         </div>
         <div className="flex items-center gap-2">
+          {!needsProvision && (
+            <button
+              onClick={handleExport}
+              disabled={isExporting}
+              className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white disabled:opacity-50"
+              title="匯出 Workspace"
+            >
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Download className="w-4 h-4" />
+              )}
+            </button>
+          )}
           <button
             onClick={() => setShowSettings(true)}
             className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white"
@@ -360,6 +389,7 @@ export default function ProjectDetailPage() {
         onDelete={handleDelete}
         onReprovision={handleReprovision}
         onResetSession={handleResetSession}
+        onExport={handleExport}
       />
       <Dialog
         open={!!dialog}

@@ -9,11 +9,28 @@ FROM python:3.11-slim AS dependencies
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PIP_NO_PYTHON_VERSION_WARNING=1
 
-# 只安裝 runtime 必要的系統套件
+# 只安裝 runtime 必要的系統套件與工具鏈
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates \
+      curl \
       git \
+      gnupg \
+      lsb-release \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public \
+      | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb \
+      $(. /etc/os-release && echo $VERSION_CODENAME) main" \
+      > /etc/apt/sources.list.d/adoptium.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+      golang-go \
+      temurin-17-jdk \
+      kotlin \
+      postgresql-client \
+      nodejs \
+      npm \
     && rm -rf /var/lib/apt/lists/*
 
 # 先複製 requirements.txt（這層變動頻率低，cache 命中率高）

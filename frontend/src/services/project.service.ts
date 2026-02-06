@@ -44,3 +44,19 @@ export const reprovisionProjectAPI = async (id: string): Promise<Project> => {
   const response = await api.post(`/api/v1/projects/${id}/reprovision`)
   return response.data
 }
+
+export const exportWorkspaceAPI = async (id: string, projectName: string): Promise<void> => {
+  const response = await api.get(`/api/v1/projects/${id}/export`, {
+    responseType: 'blob'
+  })
+
+  // 建立下載連結
+  const url = window.URL.createObjectURL(new Blob([response.data]))
+  const link = document.createElement('a')
+  link.href = url
+  link.setAttribute('download', `${projectName}-workspace.tar.gz`)
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
