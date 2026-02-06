@@ -39,14 +39,8 @@ WORKDIR /workspace
 # 建立目錄結構（單一 RUN 指令）
 RUN mkdir -p memory artifacts skills agent
 
-# 複製 agent 程式碼（排除 workspace 子目錄，使用 .dockerignore）
-# 按變動頻率排序：低頻率的先複製
-COPY agent/__init__.py agent/.env.example /workspace/agent/
-COPY agent/models.py agent/registry.py agent/chunk_parser.py /workspace/agent/
-COPY agent/prompts.py agent/deep_agent.py agent/ai_server.py /workspace/agent/
-COPY agent/tools/ /workspace/agent/tools/
-COPY agent/subagents/ /workspace/agent/subagents/
-COPY agent/server/ /workspace/agent/server/
+# 複製 agent 程式碼
+COPY agent/ /workspace/agent/
 
 # 複製 workspace 資源（memory 和 skills）
 COPY agent/workspace/memory/ /workspace/memory/
