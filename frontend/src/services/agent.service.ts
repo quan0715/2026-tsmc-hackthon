@@ -5,8 +5,8 @@ import type { AgentRun, AgentRunDetail, AgentRunListResponse, AgentLogEvent } fr
 /**
  * 啟動 Agent Run
  */
-export const startAgentRunAPI = async (projectId: string): Promise<AgentRun> => {
-  const response = await api.post(`/api/v1/projects/${projectId}/agent/run`, {})
+export const startAgentRunAPI = async (projectId: string, model?: string): Promise<AgentRun> => {
+  const response = await api.post(`/api/v1/projects/${projectId}/agent/run`, { model })
   return response.data
 }
 

@@ -14,12 +14,14 @@ import type {
 export const sendChatMessageAPI = async (
   projectId: string,
   message: string,
-  threadId?: string
+  threadId?: string,
+  model?: string
 ): Promise<SendChatMessageResponse> => {
   const response = await api.post(`/api/v1/projects/${projectId}/chat`, {
     message,
     thread_id: threadId,
     verbose: true,
+    model,
   })
   return response.data
 }

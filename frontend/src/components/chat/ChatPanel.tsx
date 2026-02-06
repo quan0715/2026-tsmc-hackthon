@@ -20,6 +20,7 @@ import ReactMarkdown from "react-markdown";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { apiErrorMessage } from "@/utils/apiError";
 import { useAgentRunStream } from "@/hooks/useAgentRunStream";
+import { ModelSelector } from "@/components/common/ModelSelector";
 
 interface Props {
   projectId: string;
@@ -50,6 +51,7 @@ export function ChatPanel({
   onReconnect,
 }: Props) {
   const [input, setInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamHint, setStreamHint] = useState<string | null>(null);
   const [streamStart, setStreamStart] = useState<number | null>(null);
@@ -213,7 +215,8 @@ export function ChatPanel({
       const response = await sendChatMessageAPI(
         projectId,
         userMessage.content,
-        threadId || undefined
+        threadId || undefined,
+        selectedModel || undefined
       );
       setCurrentTaskId(response.task_id);
       onThreadIdChange(response.thread_id);
@@ -375,10 +378,20 @@ export function ChatPanel({
 
       case "status":
         if (event.content) {
-          const status = (event.content as { status?: string }).status;
+          const statusData = event.content as { status?: string; error_message?: string };
+          const status = statusData.status;
           if (status === "success" || status === "failed" || status === "stopped") {
             setIsStreaming(false);
             cancelStreamRef.current = null;
+            if (status === "failed" && statusData.error_message) {
+              onMessagesChange((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, content: msg.content || `Error: ${statusData.error_message}` }
+                    : msg
+                )
+              );
+            }
           }
         }
         break;
@@ -416,6 +429,16 @@ export function ChatPanel({
         break;
 
       case "error":
+        if (event.message || event.content) {
+          const errMsg = event.message || String(event.content);
+          onMessagesChange((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: msg.content || `Error: ${errMsg}` }
+                : msg
+            )
+          );
+        }
         setIsStreaming(false);
         break;
     }
@@ -473,7 +496,7 @@ export function ChatPanel({
 
       {/* Input */}
       <div className="p-2">
-        <div className="flex items-end gap-2 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-gray-600 transition-colors">
+        <div className="bg-gray-800 rounded-xl border border-gray-700 focus-within:border-gray-600 transition-colors">
           {/* Textarea */}
           <textarea
             ref={textareaRef}
@@ -482,29 +505,38 @@ export function ChatPanel({
             onKeyDown={handleKeyDown}
             placeholder={disabled ? "Project not ready..." : isAgentRunning ? "Agent is running..." : "Message..."}
             disabled={isAnyStreaming || disabled}
-            className="flex-1 bg-transparent px-3 py-2.5 text-sm text-gray-100 placeholder-gray-500 resize-none focus:outline-none min-h-[24px] max-h-[200px] leading-relaxed"
+            className="w-full bg-transparent px-3 py-2.5 text-sm text-gray-100 placeholder-gray-500 resize-none focus:outline-none min-h-[24px] max-h-[200px] leading-relaxed"
             rows={1}
           />
 
-          {/* Send/Stop Button */}
-          {isAnyStreaming ? (
-            <button
-              onClick={stopChat}
-              className="flex-shrink-0 w-8 h-8 mr-1.5 mb-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition-colors"
-              title="Stop"
-            >
-              <Square className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || disabled || isAgentRunning}
-              className="flex-shrink-0 w-8 h-8 mr-1.5 mb-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 text-white disabled:text-gray-500 flex items-center justify-center transition-colors disabled:cursor-not-allowed"
-              title="Send message"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
-          )}
+          {/* Bottom bar: Model selector + Send button */}
+          <div className="flex items-center justify-between px-1.5 pb-1.5">
+            <ModelSelector
+              value={selectedModel}
+              onChange={setSelectedModel}
+              disabled={isAnyStreaming || disabled}
+            />
+
+            {/* Send/Stop Button */}
+            {isAnyStreaming ? (
+              <button
+                onClick={stopChat}
+                className="flex-shrink-0 w-7 h-7 rounded-lg bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition-colors"
+                title="Stop"
+              >
+                <Square className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={sendMessage}
+                disabled={!input.trim() || disabled || isAgentRunning}
+                className="flex-shrink-0 w-7 h-7 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 text-white disabled:text-gray-500 flex items-center justify-center transition-colors disabled:cursor-not-allowed"
+                title="Send message"
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
         {isAnyStreaming && (
           <div className="px-2 pt-2 text-[11px] text-gray-500 flex items-center gap-2">

@@ -59,3 +59,8 @@ scripts/.cache
 # ignore test files
 agent/tools/test_new_parsers.py
 agent/tools/test_parsers.py
+
+
+# GCP credentials
+gcp-credentials.json
+**/gcp-credentials.json
