@@ -79,8 +79,21 @@ def get_parser(filepath: str):
         except ImportError:
             from go_parser import GoParser
         return GoParser()
+    elif language == 'ruby':
+        try:
+            from .ruby_parser import RubyParser
+        except ImportError:
+            from ruby_parser import RubyParser
+        return RubyParser()
+    elif language in ['c', 'cpp']:
+        try:
+            from .c_parser import CParser
+        except ImportError:
+            from c_parser import CParser
+        return CParser()
     else:
         raise ValueError(
             f"Unsupported language: {language or 'unknown'} (file: {filepath}). "
-            f"Supported languages: python, javascript, typescript, java, go"
+            f"Supported languages: python, javascript, typescript, java, go, ruby, c, cpp"
         )
+
