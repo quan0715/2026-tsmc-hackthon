@@ -99,7 +99,23 @@ jobs:
               fi
 
               echo "📦 Authenticating Docker with GAR..."
-              gcloud auth configure-docker ${{ env.REGISTRY_HOST }} --quiet
+              if command -v gcloud >/dev/null 2>&1; then
+                gcloud auth configure-docker ${{ env.REGISTRY_HOST }} --quiet
+              else
+                # No gcloud on the VM. Use the instance service account token from metadata server.
+                if ! command -v curl >/dev/null 2>&1; then
+                  echo "❌ curl is required to fetch metadata token (gcloud not found)"
+                  exit 1
+                fi
+                TOKEN_JSON="$(curl -fsS -H 'Metadata-Flavor: Google' \
+                  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token')"
+                ACCESS_TOKEN="$(printf '%s' "$TOKEN_JSON" | python3 -c 'import json,sys;print(json.load(sys.stdin)["access_token"])' 2>/dev/null || true)"
+                if [ -z "$ACCESS_TOKEN" ]; then
+                  echo "❌ Failed to fetch access token from metadata server"
+                  exit 1
+                fi
+                echo "$ACCESS_TOKEN" | docker login -u oauth2accesstoken --password-stdin "https://${{ env.REGISTRY_HOST }}"
+              fi
 
               echo "📥 Pulling latest images..."
               docker pull ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }}
@@ -120,7 +136,15 @@ jobs:
                   docker-compose "$@"
                   return
                 fi
-                docker compose "$@"
+                if docker compose version >/dev/null 2>&1; then
+                  docker compose "$@"
+                  return
+                fi
+                # Last resort: run Compose v2 in a container (works even on minimal COS images).
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v "$PWD:$PWD" -w "$PWD" \
+                  docker/compose:2.27.0 "$@"
               }
 
               # Ensure workspace host dir exists for volume mount.
