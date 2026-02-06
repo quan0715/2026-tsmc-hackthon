@@ -49,6 +49,7 @@ services:
       - ../backend:/app
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp/refactor-workspaces:/tmp/refactor-workspaces
+      - ${HOME}/.config/gcloud/application_default_credentials.json:/root/.config/gcloud/application_default_credentials.json:ro
     env_file:
       - ../backend/.env
     environment:

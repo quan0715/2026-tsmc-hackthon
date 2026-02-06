@@ -24,6 +24,9 @@ sse-starlette==1.8.2
 python-dotenv==1.0.0
 python-multipart==0.0.6
 
+# GCP / ADC
+google-auth>=2.0.0
+
 # 認證
 python-jose[cryptography]==3.3.0
 passlib==1.7.4

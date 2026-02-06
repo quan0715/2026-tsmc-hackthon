@@ -60,7 +60,19 @@ async def list_available_models():
     if settings.anthropic_api_key:
         models.extend(ANTHROPIC_MODELS)
 
-    has_vertex = bool(settings.gcp_project_id and settings.google_application_credentials)
+    def _has_vertex_adc() -> bool:
+        if not settings.gcp_project_id:
+            return False
+        try:
+            import google.auth
+            creds, _ = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            return creds is not None
+        except Exception:
+            return False
+
+    has_vertex = _has_vertex_adc()
     if has_vertex:
         models.extend(VERTEX_MODELS)
 

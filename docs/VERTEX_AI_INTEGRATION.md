@@ -22,7 +22,7 @@
    - 支援 Service Account 認證
 
 2. **環境變數配置** (`.env`)
-   - `GCP_PROJECT_ID = cloud-native-458808`
+   - `GCP_PROJECT_ID = tsmccareerhack2026-tsid-grp4`
    - `GOOGLE_APPLICATION_CREDENTIALS` 路徑已定義
 
 3. **CI/CD 管道**
@@ -327,7 +327,7 @@ def load_credentials(self, credentials_path: str = None):
 gh variable set MODEL_PROVIDER --body "vertex-gemini"
 
 # 設定 GCP Project ID
-gh variable set VERTEX_PROJECT_ID --body "cloud-native-458808"
+gh variable set GCP_PROJECT_ID --body "tsmccareerhack2026-tsid-grp4"
 ```
 
 **GitHub Secrets 設定**（選用）：

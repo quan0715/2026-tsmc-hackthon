@@ -10,35 +10,38 @@ from langchain_anthropic import ChatAnthropic
 
 # Vertex AI 相關套件使用條件 import（避免依賴衝突）
 try:
-    from google.oauth2.service_account import Credentials
+    import google.auth
     from langchain_google_vertexai.model_garden import ChatAnthropicVertex
     from langchain_google_genai import ChatGoogleGenerativeAI
     VERTEX_AI_AVAILABLE = True
 except ImportError:
     VERTEX_AI_AVAILABLE = False
 
-PROJECT_ID = "cloud-native-458808"
-CREDENTIALS_PATH = "cloud-native-458808-f41aa4273928.json"
+DEFAULT_PROJECT_ID = os.getenv("GCP_PROJECT_ID", "")
+DEFAULT_LOCATION = os.getenv("GCP_LOCATION", "us-central1")
 
 
 class VertexModelProvider:
-    def __init__(self, project: str, credentials_path: str):
+    def __init__(self, project: str = None):
         if not VERTEX_AI_AVAILABLE:
             raise ImportError(
                 "Vertex AI dependencies not available. "
                 "Install with: pip install langchain-google-vertexai langchain-google-genai"
             )
-        self.credentials = self._load_credentials(credentials_path)
-        self.project = project
+        self.project = project or DEFAULT_PROJECT_ID
+        if not self.project:
+            raise ValueError("GCP_PROJECT_ID is required for Vertex AI")
+        self.credentials = self._load_credentials()
 
-    def _load_credentials(self, credentials_path: str):
+    def _load_credentials(self):
+        scopes = ["https://www.googleapis.com/auth/cloud-platform"]
         try:
-            return Credentials.from_service_account_file(
-                credentials_path,
-                scopes=["https://www.googleapis.com/auth/cloud-platform"],
-            )
-        except FileNotFoundError:
-            raise ValueError("credentials.json file not found")
+            creds, _ = google.auth.default(scopes=scopes)
+        except Exception as exc:
+            raise ValueError("ADC credentials not available") from exc
+        if creds is None:
+            raise ValueError("ADC credentials not available")
+        return creds
 
     def get_anthropic_vertex_model(
         self,
@@ -56,7 +59,7 @@ class VertexModelProvider:
     def get_gemini_vertex_model(
         self,
         model_name: str = "gemini-2.5-pro",
-        location: str = "us-central1",
+        location: str = DEFAULT_LOCATION,
     ):
         """取得 Gemini Vertex AI 模型"""
         return ChatGoogleGenerativeAI(
@@ -73,7 +76,7 @@ class VertexModelProvider:
     def get_vertex_model(
         self,
         model_name: str,
-        location: str = "us-central1",
+        location: str = DEFAULT_LOCATION,
     ):
         """取得 Vertex AI Model Garden 中的通用模型
 
@@ -110,8 +113,7 @@ if __name__ == "__main__":
     anthropic_model_provider = AnthropicModelProvider()
     context_model = anthropic_model_provider.get_model()
     # 移除註解可以測試 vertex model 的連接
-    # vertex_model_provider = VertexModelProvider(
-    #     project=PROJECT_ID, credentials_path=CREDENTIALS_PATH)
+    # vertex_model_provider = VertexModelProvider(project=DEFAULT_PROJECT_ID)
     # context_model = vertex_model_provider.get_gemini_vertex_model()
     result = context_model.stream(
         [

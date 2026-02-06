@@ -20,12 +20,11 @@ class ModelFactory:
         )
 
         # 初始化 Vertex AI Provider
-        gcp_project = os.getenv("GCP_PROJECT_ID")
-        credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        gcp_project = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
 
-        if gcp_project and credentials_path:
+        if gcp_project:
             try:
-                self.vertex_provider = VertexModelProvider(gcp_project, credentials_path)
+                self.vertex_provider = VertexModelProvider(project=gcp_project)
             except Exception as e:
                 logger.warning(f"Vertex AI Provider 初始化失敗: {e}")
                 self.vertex_provider = None
@@ -69,8 +68,8 @@ class ModelFactory:
         elif provider == "vertex-anthropic":
             if not self.vertex_provider:
                 raise ValueError(
-                    "Vertex AI 未配置。請設定 GCP_PROJECT_ID 和 "
-                    "GOOGLE_APPLICATION_CREDENTIALS 環境變數"
+                    "Vertex AI 未配置。請設定 GCP_PROJECT_ID 並確保 "
+                    "ADC 或 GOOGLE_APPLICATION_CREDENTIALS 可用"
                 )
             location = config.get("location", "us-east5")
             return self.vertex_provider.get_anthropic_vertex_model(
@@ -80,8 +79,8 @@ class ModelFactory:
         elif provider == "vertex-gemini":
             if not self.vertex_provider:
                 raise ValueError(
-                    "Vertex AI 未配置。請設定 GCP_PROJECT_ID 和 "
-                    "GOOGLE_APPLICATION_CREDENTIALS 環境變數"
+                    "Vertex AI 未配置。請設定 GCP_PROJECT_ID 並確保 "
+                    "ADC 或 GOOGLE_APPLICATION_CREDENTIALS 可用"
                 )
             location = config.get("location", "us-central1")
             return self.vertex_provider.get_gemini_vertex_model(
@@ -91,8 +90,8 @@ class ModelFactory:
         elif provider == "vertex-other":
             if not self.vertex_provider:
                 raise ValueError(
-                    "Vertex AI 未配置。請設定 GCP_PROJECT_ID 和 "
-                    "GOOGLE_APPLICATION_CREDENTIALS 環境變數"
+                    "Vertex AI 未配置。請設定 GCP_PROJECT_ID 並確保 "
+                    "ADC 或 GOOGLE_APPLICATION_CREDENTIALS 可用"
                 )
             location = config.get("location", "us-central1")
             return self.vertex_provider.get_vertex_model(
