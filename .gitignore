@@ -49,6 +49,9 @@ temp/
 .token
 *.token
 
+# Local secrets (do not commit)
+.secrets/
+
 # 腳本臨時檔案
 scripts/*.tmp
 scripts/.cache
