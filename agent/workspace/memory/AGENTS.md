@@ -17,7 +17,6 @@ Role definition, workflow, tool instructions, etc. are handled by system prompts
 ├── refactor-repo/  # Refactored code (Your workspace)
 ├── memory/         # Memory system files
 │   ├── AGENTS.md      # Your role definition (Read-only reference)
-│   ├── CHECKLIST.md   # Rapid progress checklist (Must update every iteration)
 │   ├── plan.md        # Detailed refactor plan (Must update every iteration)
 │   └── learnings.md   # Error pattern knowledge base (Optional)
 │   └── status.json    # Stores iteration and phase status
