@@ -190,6 +190,18 @@ jobs:
                 chmod 600 backend.env || true
               fi
 
+              # Ensure secrets are applied on every deploy (without recreating the file)
+              if [ -n "$REMOTE_ANTHROPIC_API_KEY" ]; then
+                tmp_env="$(mktemp)"
+                awk -v val="$REMOTE_ANTHROPIC_API_KEY" '
+                  BEGIN {found=0}
+                  /^ANTHROPIC_API_KEY=/ {print "ANTHROPIC_API_KEY=" val; found=1; next}
+                  {print}
+                  END {if (!found) print "ANTHROPIC_API_KEY=" val}
+                ' backend.env > "$tmp_env" && mv "$tmp_env" backend.env
+                chmod 600 backend.env || true
+              fi
+
               # 驗證環境變數（僅警告，不阻止部署）
               echo "🔍 驗證環境變數..."
 

@@ -111,6 +111,11 @@ async def list_branches(
         stderr = (result.stderr or "").strip()
         stdout = (result.stdout or "").strip()
         logger.warning("git ls-remote failed: %s", stderr or stdout)
+        if "Could not resolve host" in stderr or "Could not resolve host" in stdout:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unable to resolve GitHub host from server. Please verify outbound DNS/network.",
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=stderr or stdout or "Failed to fetch branches",
@@ -149,4 +154,3 @@ async def list_branches(
         branches=branches_sorted,
         default_branch=default_branch,
     )
-
