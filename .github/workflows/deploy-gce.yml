@@ -190,16 +190,24 @@ jobs:
                 chmod 600 backend.env || true
               fi
 
-              # 驗證必填環境變數
+              # 驗證環境變數（僅警告，不阻止部署）
               echo "🔍 驗證環境變數..."
-              required_vars=("ANTHROPIC_API_KEY" "JWT_SECRET_KEY")
-              for var in "${required_vars[@]}"; do
-                if ! grep -q "^${var}=" backend.env || grep -q "^${var}=$" backend.env || grep -q "^${var}=\"\"$" backend.env; then
-                  echo "❌ 錯誤: $var 未在 backend.env 中設置或為空值"
-                  echo "請在 GitHub Settings > Secrets and variables > Actions > Secrets 中配置 $var"
-                  exit 1
-                fi
-              done
+
+              # 檢查 JWT_SECRET_KEY（必填）
+              if ! grep -q "^JWT_SECRET_KEY=" backend.env || grep -q "^JWT_SECRET_KEY=$" backend.env || grep -q "^JWT_SECRET_KEY=\"\"$" backend.env; then
+                echo "❌ 錯誤: JWT_SECRET_KEY 未在 backend.env 中設置或為空值"
+                echo "請在 GitHub Settings > Secrets 中配置 JWT_SECRET_KEY"
+                exit 1
+              fi
+
+              # 檢查 ANTHROPIC_API_KEY（可選，僅警告）
+              if ! grep -q "^ANTHROPIC_API_KEY=" backend.env || grep -q "^ANTHROPIC_API_KEY=$" backend.env || grep -q "^ANTHROPIC_API_KEY=\"\"$" backend.env; then
+                echo "⚠️  警告: ANTHROPIC_API_KEY 未在 backend.env 中設置"
+                echo "    Anthropic 模型將無法使用，請在 GitHub Secrets 中配置以啟用"
+              else
+                echo "✅ ANTHROPIC_API_KEY 已配置"
+              fi
+
               echo "✅ 環境變數驗證通過"
 
               # Write compose file on every deploy so it always matches the repo version + current IMAGE_TAG.
