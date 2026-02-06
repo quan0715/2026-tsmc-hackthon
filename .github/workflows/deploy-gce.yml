@@ -126,10 +126,22 @@ jobs:
                 echo "$ACCESS_TOKEN" | docker login -u oauth2accesstoken --password-stdin "https://${{ env.REGISTRY_HOST }}"
               fi
 
-              echo "📥 Pulling latest images..."
-              docker pull ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }}
-              docker pull ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }}
-              docker pull ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }}
+              echo "📥 Pulling images..."
+              pull_or_fallback() {
+                local image="$1"
+                local tag="$2"
+                if docker pull "${image}:${tag}"; then
+                  return
+                fi
+                echo "⚠️  ${image}:${tag} not found. Falling back to :latest"
+                docker pull "${image}:latest"
+                # Tag fallback as the expected tag so compose can use it.
+                docker tag "${image}:latest" "${image}:${tag}"
+              }
+
+              pull_or_fallback ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base ${{ env.IMAGE_TAG }}
+              pull_or_fallback ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api ${{ env.IMAGE_TAG }}
+              pull_or_fallback ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend ${{ env.IMAGE_TAG }}
 
               # Tag as latest
               docker tag ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }} refactor-base:latest
