@@ -1,4 +1,5 @@
 """FastAPI 應用程式入口"""
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -42,12 +43,23 @@ app = FastAPI(
 )
 
 # CORS 設定
+# 從環境變數讀取允許的來源，生產環境應設定具體域名
+cors_origins_str = os.environ.get("CORS_ORIGINS", "")
+cors_origins = [origin.strip() for origin in cors_origins_str.split(",") if origin.strip()]
+
+# 如果未設定，開發模式允許所有來源，生產模式僅允許本地
+if not cors_origins:
+    if settings.debug:
+        cors_origins = ["*"]
+    else:
+        cors_origins = ["http://localhost:5173", "http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 生產環境應該限制
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # 註冊路由

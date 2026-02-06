@@ -2,6 +2,8 @@
 import subprocess
 import json
 import os
+import re
+import shlex
 from typing import Optional, Dict, Any
 import logging
 
@@ -9,6 +11,101 @@ from ..config import settings
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_git_url(url: str) -> str:
+    """驗證並清理 Git URL
+    
+    只允許 http(s):// 和 git@ 格式的 URL
+    防止命令注入攻擊
+    """
+    if not url:
+        raise ValueError("Git URL 不能為空")
+    
+    # 放寬一點的通用 URL 格式（允許子路徑）
+    # 但確保不含危險字元
+    # 支援: https://github.com/user/repo.git, https://github.com/user/repo, git@github.com:user/repo.git
+    safe_pattern = r'^(https?://|git@)[a-zA-Z0-9\-_.@:/]+$'
+    
+    if not re.match(safe_pattern, url):
+        raise ValueError(f"無效的 Git URL 格式: {url}")
+    
+    # 額外檢查：不允許 shell 特殊字元
+    dangerous_chars = [';', '&', '|', '$', '`', '(', ')', '{', '}', '[', ']', '<', '>', '!', '\n', '\r']
+    for char in dangerous_chars:
+        if char in url:
+            raise ValueError(f"Git URL 包含不允許的字元: {char}")
+    
+    return url
+
+
+def _sanitize_branch_name(branch: str) -> str:
+    """驗證並清理 Git branch 名稱
+    
+    防止命令注入攻擊
+    """
+    if not branch:
+        return "main"
+    
+    # Git branch 名稱只允許特定字元
+    # 參考: https://git-scm.com/docs/git-check-ref-format
+    safe_pattern = r'^[a-zA-Z0-9\-_./]+$'
+    
+    if not re.match(safe_pattern, branch):
+        raise ValueError(f"無效的 branch 名稱: {branch}")
+    
+    # 不允許連續的點或斜線
+    if '..' in branch or '//' in branch:
+        raise ValueError(f"無效的 branch 名稱: {branch}")
+    
+    # 不允許以點或斜線開頭或結尾
+    if branch.startswith('.') or branch.endswith('.') or branch.startswith('/') or branch.endswith('/'):
+        raise ValueError(f"無效的 branch 名稱: {branch}")
+    
+    return branch
+
+
+def _sanitize_path(path: str, base_path: str = "/workspace") -> str:
+    """驗證並清理檔案路徑
+    
+    防止路徑遍歷攻擊
+    """
+    if not path:
+        raise ValueError("路徑不能為空")
+    
+    # 檢查路徑遍歷（包括 URL 編碼的變體）
+    path_lower = path.lower()
+    # 檢查基本的 .. 和各種編碼形式
+    traversal_patterns = [
+        '..',           # 基本形式
+        '%2e%2e',       # URL 編碼
+        '%252e%252e',   # 雙重 URL 編碼
+        '%2f',          # URL 編碼的 /
+        '%252f',        # 雙重 URL 編碼的 /
+    ]
+    for pattern in traversal_patterns:
+        if pattern in path_lower:
+            raise ValueError("路徑不能包含 '..'")
+    
+    # 不允許 shell 特殊字元
+    dangerous_chars = [';', '&', '|', '$', '`', '(', ')', '{', '}', '<', '>', '!', '\n', '\r', "'", '"']
+    for char in dangerous_chars:
+        if char in path:
+            raise ValueError(f"路徑包含不允許的字元: {char}")
+    
+    # 正規化路徑
+    normalized = os.path.normpath(path)
+    
+    # 如果是相對路徑，加上 base_path
+    if not normalized.startswith('/'):
+        full_path = os.path.normpath(os.path.join(base_path, normalized))
+    else:
+        full_path = normalized
+    
+    # 確保路徑在 base_path 下
+    if not full_path.startswith(base_path):
+        raise ValueError(f"路徑必須在 {base_path} 下")
+    
+    return full_path
 
 class ContainerService:
     """Docker 容器服務 (使用subprocess調用docker命令)"""
@@ -240,11 +337,24 @@ class ContainerService:
         target_dir: str = "/workspace/repo",
         timeout: int = 120,
     ) -> Dict[str, Any]:
-        """在容器中 clone repository"""
+        """在容器中 clone repository
+        
+        Args:
+            container_id: 容器 ID
+            repo_url: Git repository URL（會驗證格式）
+            branch: Git branch 名稱（會驗證格式）
+            target_dir: 目標目錄
+            timeout: 超時時間（秒）
+        """
+        # 驗證並清理輸入參數（防止命令注入）
+        safe_repo_url = _sanitize_git_url(repo_url)
+        safe_branch = _sanitize_branch_name(branch)
+        
         try:
             # 先清除目標目錄（如果存在）
+            # 使用 shlex.quote 來安全處理路徑
             logger.info(f"清理目標目錄: {target_dir}")
-            cleanup_cmd = f"rm -rf {target_dir}"
+            cleanup_cmd = f"rm -rf {shlex.quote(target_dir)}"
             subprocess.run(
                 ["docker", "exec", "-w", "/workspace", container_id, "sh", "-c", cleanup_cmd],
                 capture_output=True,
@@ -253,8 +363,13 @@ class ContainerService:
             )
 
             # 執行 git clone 指令
-            clone_cmd = f"git clone --branch {branch} --depth {settings.git_depth} {repo_url} {target_dir} 2>&1"
-            logger.info(f"執行 clone 指令: git clone --branch {branch} --depth {settings.git_depth} {repo_url}")
+            # 使用 shlex.quote 來安全處理所有參數
+            clone_cmd = (
+                f"git clone --branch {shlex.quote(safe_branch)} "
+                f"--depth {settings.git_depth} "
+                f"{shlex.quote(safe_repo_url)} {shlex.quote(target_dir)} 2>&1"
+            )
+            logger.info(f"執行 clone 指令: git clone --branch {safe_branch} --depth {settings.git_depth} {safe_repo_url}")
 
             result = subprocess.run(
                 ["docker", "exec", "-w", "/workspace", container_id, "sh", "-c", clone_cmd],
@@ -279,7 +394,7 @@ class ContainerService:
                 logger.error(f"Clone repository 失敗 (exit code: {result.returncode}): {error_msg}")
                 raise Exception(f"Clone repository 失敗: {error_msg}")
 
-            logger.info(f"成功 clone repository: {repo_url}")
+            logger.info(f"成功 clone repository: {safe_repo_url}")
             return {
                 "exit_code": result.returncode,
                 "stdout": result.stdout,
@@ -298,13 +413,26 @@ class ContainerService:
         container_id: str,
         command: str,
         workdir: str = "/workspace/repo",
+        timeout: int = 300,  # 5 分鐘預設超時
     ) -> Dict[str, Any]:
-        """在容器中執行指令"""
+        """在容器中執行指令
+        
+        Args:
+            container_id: 容器 ID
+            command: 要執行的指令
+            workdir: 工作目錄
+            timeout: 超時時間（秒），預設 5 分鐘
+        
+        Note:
+            指令在隔離的 Docker 容器中執行，安全性由容器隔離保證。
+            只有通過認證且擁有專案存取權限的用戶才能執行指令。
+        """
         try:
             result = subprocess.run(
                 ["docker", "exec", "-w", workdir, container_id, "sh", "-c", command],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=timeout
             )
 
             return {
@@ -312,6 +440,9 @@ class ContainerService:
                 "stdout": result.stdout,
                 "stderr": result.stderr,
             }
+        except subprocess.TimeoutExpired:
+            logger.error(f"執行超時 ({timeout} 秒): {command[:100]}...")
+            raise Exception(f"執行超時 ({timeout} 秒)")
         except Exception as e:
             logger.error(f"執行指令失敗: {e}")
             raise
@@ -465,19 +596,13 @@ class ContainerService:
         Returns:
             包含 path, content, size 的字典
         """
-        # 確保路徑安全
-        if '..' in file_path:
-            raise ValueError("路徑不能包含 ..")
-        
-        # 如果不是絕對路徑，加上 /workspace 前綴
-        if not file_path.startswith('/'):
-            full_path = f"/workspace/{file_path}"
-        else:
-            full_path = file_path
+        # 驗證並清理路徑（防止路徑遍歷攻擊）
+        full_path = _sanitize_path(file_path, "/workspace")
         
         try:
             # 先檢查檔案大小
-            size_cmd = f"stat -c %s '{full_path}' 2>/dev/null || echo 0"
+            # 使用 shlex.quote 來安全處理路徑
+            size_cmd = f"stat -c %s {shlex.quote(full_path)} 2>/dev/null || echo 0"
             size_result = subprocess.run(
                 ["docker", "exec", container_id, "sh", "-c", size_cmd],
                 capture_output=True,
@@ -495,7 +620,7 @@ class ContainerService:
                 raise ValueError(f"檔案過大: {file_size} bytes (最大 {max_size} bytes)")
             
             # 讀取檔案內容
-            read_cmd = f"cat '{full_path}'"
+            read_cmd = f"cat {shlex.quote(full_path)}"
             result = subprocess.run(
                 ["docker", "exec", container_id, "sh", "-c", read_cmd],
                 capture_output=True,
