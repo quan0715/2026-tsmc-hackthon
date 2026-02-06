@@ -16,14 +16,6 @@ AVAILABLE_MODELS = {
         "description": "平衡效能與成本，適合大多數任務",
         "context_window": 200000,
     },
-    "claude-opus-4-6": {
-        "display_name": "Claude Opus 4.6",
-        "provider": "anthropic",
-        "model_name": "claude-opus-4-6",
-        "description": "最強大的模型，適合複雜推理任務",
-        "context_window": 200000,
-    },
-
     # ==================== Vertex AI - Anthropic ====================
     "claude-sonnet-vertex": {
         "display_name": "Claude Sonnet 4.5 (Vertex AI)",

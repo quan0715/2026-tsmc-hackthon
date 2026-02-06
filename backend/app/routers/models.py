@@ -26,8 +26,6 @@ ANTHROPIC_MODELS = [
              description="最快速且經濟的模型，適合簡單任務", context_window=200000),
     ModelInfo(id="claude-sonnet-4-5", display_name="Claude Sonnet 4.5", provider="Anthropic",
              description="平衡效能與成本，適合大多數任務", context_window=200000),
-    ModelInfo(id="claude-opus-4-6", display_name="Claude Opus 4.6", provider="Anthropic",
-             description="最強大的模型，適合複雜推理任務", context_window=200000),
 ]
 
 VERTEX_MODELS = [
