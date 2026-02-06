@@ -8,14 +8,14 @@ class ExecCommandRequest(BaseModel):
 
     command: str = Field(..., description="要執行的指令")
     workdir: Optional[str] = Field(
-        default="./repo", description="工作目錄"
+        default="/workspace/repo", description="工作目錄"
     )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "command": "ls -la",
-                "workdir": "./repo",
+                "workdir": "/workspace/repo",
             }
         }
 
