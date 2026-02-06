@@ -13,6 +13,8 @@ env:
   REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
   GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  # Prevent gcloud from prompting (important because we use heredoc stdin for the remote script).
+  CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
 
 jobs:
   deploy:
@@ -42,6 +44,21 @@ jobs:
       - name: Setup gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Prepare SSH for gcloud (non-interactive)
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # gcloud compute ssh defaults to ~/.ssh/google_compute_engine
+          if [ ! -f ~/.ssh/google_compute_engine ]; then
+            ssh-keygen -t rsa -b 3072 -f ~/.ssh/google_compute_engine -N "" -C "gha-${GITHUB_RUN_ID}"
+          fi
+
+          chmod 600 ~/.ssh/google_compute_engine
+          chmod 644 ~/.ssh/google_compute_engine.pub
+
       - name: Deploy to GCE
         run: |
           echo "============================================"
@@ -56,6 +73,10 @@ jobs:
           gcloud compute ssh ${{ env.GCE_INSTANCE }} \
             --zone=${{ env.GCE_ZONE }} \
             --project=${{ env.GCP_PROJECT_ID }} \
+            --quiet \
+            --ssh-flag="-o BatchMode=yes" \
+            --ssh-flag="-o StrictHostKeyChecking=no" \
+            --ssh-flag="-o UserKnownHostsFile=/dev/null" \
             --command="bash -s" << 'ENDSSH'
               set -e
 
@@ -75,11 +96,24 @@ jobs:
               echo "🔄 Updating services with docker-compose..."
               cd ~/auto-refactor-agent
 
+              if [ ! -f devops/docker-compose.prod.yml ]; then
+                echo "❌ Missing devops/docker-compose.prod.yml under ~/auto-refactor-agent"
+                exit 1
+              fi
+
+              compose() {
+                if command -v docker-compose >/dev/null 2>&1; then
+                  docker-compose "$@"
+                  return
+                fi
+                docker compose "$@"
+              }
+
               # 停止並移除舊容器
-              docker-compose -f devops/docker-compose.prod.yml down
+              compose -f devops/docker-compose.prod.yml down
 
               # 啟動新容器
-              docker-compose -f devops/docker-compose.prod.yml up -d
+              compose -f devops/docker-compose.prod.yml up -d
 
               echo "🧹 Cleaning up old images..."
               docker image prune -f
