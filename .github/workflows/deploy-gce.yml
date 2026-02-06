@@ -13,6 +13,10 @@ env:
   REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
   GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  # Optional. If set, deploy will run as this OS user on the VM (avoids defaulting to "runner").
+  GCE_SSH_USER: ${{ vars.GCE_SSH_USER }}
+  # Optional. Absolute path recommended, e.g. /opt/auto-refactor-agent
+  GCE_APP_DIR: ${{ vars.GCE_APP_DIR }}
   # Prevent gcloud from prompting (important because we use heredoc stdin for the remote script).
   CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
 
@@ -35,6 +39,8 @@ jobs:
           echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
           echo "GCE_INSTANCE=${{ vars.GCE_INSTANCE }}" >> $GITHUB_ENV
           echo "GCE_ZONE=${{ vars.GCE_ZONE }}" >> $GITHUB_ENV
+          echo "GCE_SSH_USER=${{ vars.GCE_SSH_USER }}" >> $GITHUB_ENV
+          echo "GCE_APP_DIR=${{ vars.GCE_APP_DIR }}" >> $GITHUB_ENV
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -61,6 +67,8 @@ jobs:
 
       - name: Deploy to GCE
         run: |
+          set -euo pipefail
+
           echo "============================================"
           echo "🚀 Deploying to GCE"
           echo "============================================"
@@ -69,8 +77,13 @@ jobs:
           echo "Image Tag: ${{ env.IMAGE_TAG }}"
           echo "============================================"
 
+          SSH_TARGET="${{ env.GCE_INSTANCE }}"
+          if [ -n "${GCE_SSH_USER:-}" ]; then
+            SSH_TARGET="${GCE_SSH_USER}@${{ env.GCE_INSTANCE }}"
+          fi
+
           # SSH 到 GCE 並執行部署腳本
-          gcloud compute ssh ${{ env.GCE_INSTANCE }} \
+          gcloud compute ssh "$SSH_TARGET" \
             --zone=${{ env.GCE_ZONE }} \
             --project=${{ env.GCP_PROJECT_ID }} \
             --quiet \
@@ -78,7 +91,12 @@ jobs:
             --ssh-flag="-o StrictHostKeyChecking=no" \
             --ssh-flag="-o UserKnownHostsFile=/dev/null" \
             --command="bash -s" << 'ENDSSH'
-              set -e
+              set -euo pipefail
+
+              APP_DIR="${{ env.GCE_APP_DIR }}"
+              if [ -z "$APP_DIR" ]; then
+                APP_DIR="$HOME/auto-refactor-agent"
+              fi
 
               echo "📦 Authenticating Docker with GAR..."
               gcloud auth configure-docker ${{ env.REGISTRY_HOST }} --quiet
@@ -94,7 +112,17 @@ jobs:
               docker tag ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }} refactor-frontend:latest
 
               echo "🔄 Updating services with docker-compose..."
-              cd ~/auto-refactor-agent
+              if [ ! -d "$APP_DIR" ]; then
+                echo "❌ App directory not found: $APP_DIR"
+                echo "Remote user: $(whoami)"
+                echo "Remote home: $HOME"
+                echo "Hint: set GitHub variable GCE_APP_DIR (recommended absolute path), or GCE_SSH_USER to the VM user that owns the repo."
+                ls -la "$HOME" || true
+                ls -la /home || true
+                exit 1
+              fi
+
+              cd "$APP_DIR"
 
               if [ ! -f devops/docker-compose.prod.yml ]; then
                 echo "❌ Missing devops/docker-compose.prod.yml under ~/auto-refactor-agent"
