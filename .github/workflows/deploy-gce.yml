@@ -189,7 +189,7 @@ jobs:
               image: postgres:16
               container_name: refactor-postgres
               ports:
-                - "5432:5432"
+                - "127.0.0.1:5433:5432"
               volumes:
                 - postgres_data:/var/lib/postgresql/data
               environment:
@@ -209,7 +209,7 @@ jobs:
               image: mongo:7
               container_name: refactor-mongodb
               ports:
-                - "27017:27017"
+                - "127.0.0.1:27017:27017"
               volumes:
                 - mongodb_data:/data/db
               environment:
@@ -227,7 +227,7 @@ jobs:
               image: ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }}
               container_name: refactor-api
               ports:
-                - "8000:8000"
+                - "127.0.0.1:8000:8000"
               volumes:
                 - /var/run/docker.sock:/var/run/docker.sock
                 - ${WORKSPACE_HOST_DIR}:/tmp/refactor-workspaces
@@ -302,7 +302,7 @@ jobs:
           RETRY_COUNT=0
 
           while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if curl -f -s "http://${EXTERNAL_IP}:8000/health" > /dev/null; then
+            if curl -f -s "http://${EXTERNAL_IP}:80/api/v1/health" > /dev/null; then
               echo "✅ API is healthy!"
               break
             else
