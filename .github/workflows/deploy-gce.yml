@@ -1,0 +1,149 @@
+name: Deploy to GCE
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
+
+env:
+  REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+
+jobs:
+  deploy:
+    name: Deploy to GCE
+    runs-on: ubuntu-latest
+    # 只在 CI/CD Pipeline 成功且是 push to main 或 manual dispatch 時執行
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "GCE_INSTANCE=${{ vars.GCE_INSTANCE }}" >> $GITHUB_ENV
+          echo "GCE_ZONE=${{ vars.GCE_ZONE }}" >> $GITHUB_ENV
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to GCE
+        run: |
+          echo "============================================"
+          echo "🚀 Deploying to GCE"
+          echo "============================================"
+          echo "Instance: ${{ env.GCE_INSTANCE }}"
+          echo "Zone: ${{ env.GCE_ZONE }}"
+          echo "Image Tag: ${{ env.IMAGE_TAG }}"
+          echo "============================================"
+
+          # SSH 到 GCE 並執行部署腳本
+          gcloud compute ssh ${{ env.GCE_INSTANCE }} \
+            --zone=${{ env.GCE_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --command="bash -s" << 'ENDSSH'
+              set -e
+
+              echo "📦 Authenticating Docker with GAR..."
+              gcloud auth configure-docker ${{ env.REGISTRY_HOST }} --quiet
+
+              echo "📥 Pulling latest images..."
+              docker pull ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }}
+              docker pull ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }}
+              docker pull ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }}
+
+              # Tag as latest
+              docker tag ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }} refactor-base:latest
+              docker tag ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }} refactor-api:latest
+              docker tag ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }} refactor-frontend:latest
+
+              echo "🔄 Updating services with docker-compose..."
+              cd ~/auto-refactor-agent
+
+              # 停止並移除舊容器
+              docker-compose -f devops/docker-compose.prod.yml down
+
+              # 啟動新容器
+              docker-compose -f devops/docker-compose.prod.yml up -d
+
+              echo "🧹 Cleaning up old images..."
+              docker image prune -f
+
+              echo "✅ Deployment completed successfully!"
+          ENDSSH
+
+      - name: Health check
+        run: |
+          echo "🏥 Running health check..."
+
+          # 取得 GCE 外部 IP
+          EXTERNAL_IP=$(gcloud compute instances describe ${{ env.GCE_INSTANCE }} \
+            --zone=${{ env.GCE_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+
+          echo "Instance IP: $EXTERNAL_IP"
+
+          # 等待服務啟動
+          sleep 30
+
+          # 檢查 API 健康狀態
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f -s "http://${EXTERNAL_IP}:8000/health" > /dev/null; then
+              echo "✅ API is healthy!"
+              break
+            else
+              echo "⏳ Waiting for API to be ready... ($((RETRY_COUNT + 1))/$MAX_RETRIES)"
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              sleep 10
+            fi
+          done
+
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Health check failed after $MAX_RETRIES attempts"
+            exit 1
+          fi
+
+          # 檢查 Frontend
+          if curl -f -s "http://${EXTERNAL_IP}:80" > /dev/null; then
+            echo "✅ Frontend is accessible!"
+          else
+            echo "⚠️ Frontend health check failed"
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo "============================================"
+          echo "✅ Deployment Summary"
+          echo "============================================"
+          echo "Instance: ${{ env.GCE_INSTANCE }}"
+          echo "Image Tag: ${{ env.IMAGE_TAG }}"
+          echo "Deployed Images:"
+          echo "  - refactor-base:${{ env.IMAGE_TAG }}"
+          echo "  - refactor-api:${{ env.IMAGE_TAG }}"
+          echo "  - refactor-frontend:${{ env.IMAGE_TAG }}"
+          echo "============================================"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Please check the logs and GCE instance status."

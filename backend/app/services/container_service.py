@@ -64,11 +64,14 @@ class ContainerService:
             if hasattr(settings, 'anthropic_api_key') and settings.anthropic_api_key:
                 env_vars.extend(["-e", f"ANTHROPIC_API_KEY={settings.anthropic_api_key}"])
 
-            # 傳遞 POSTGRES_URL（用於 LangGraph 持久化）
-            postgres_url = os.environ.get("POSTGRES_URL")
-            if postgres_url:
-                env_vars.extend(["-e", f"POSTGRES_URL={postgres_url}"])
-                logger.info(f"容器將使用 PostgreSQL 持久化")
+            # 傳遞 POSTGRES_URL（用於 LangGraph 持久化 - 必填）
+            if not settings.postgres_url:
+                raise Exception(
+                    "POSTGRES_URL is required but not configured. "
+                    "Please set POSTGRES_URL in .env file."
+                )
+            env_vars.extend(["-e", f"POSTGRES_URL={settings.postgres_url}"])
+            logger.info(f"容器將使用 PostgreSQL 持久化: {settings.postgres_url}")
 
             # 建立容器
             cmd = [
