@@ -1,33 +1,32 @@
+# syntax=docker/dockerfile:1.7
+
 # ============================================
 # Stage 1: Dependencies (for better caching)
 # ============================================
 FROM python:3.11-slim AS dependencies
 
+# Keep pip quiet and deterministic-ish (and avoid extra network calls for version checks).
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_PYTHON_VERSION_WARNING=1
+
 # 只安裝 runtime 必要的系統套件
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+      git \
     && rm -rf /var/lib/apt/lists/*
 
 # 先複製 requirements.txt（這層變動頻率低，cache 命中率高）
 COPY agent/requirements.txt /tmp/requirements.txt
 
 # 安裝 Python 依賴（使用 wheel 避免編譯）
-RUN pip install --no-cache-dir -r /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip,sharing=locked \
+    pip install --prefer-binary -r /tmp/requirements.txt
 
 # ============================================
 # Stage 2: Runtime
 # ============================================
-FROM python:3.11-slim AS runtime
-
-# 安裝 runtime 必要的系統套件（git 用於 clone repo）
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
-
-# 從 dependencies stage 複製已安裝的 Python 套件
-COPY --from=dependencies /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=dependencies /usr/local/bin /usr/local/bin
+FROM dependencies AS runtime
 
 # 設定環境變數
 ENV PYTHONUNBUFFERED=1
@@ -56,4 +55,3 @@ EXPOSE 8000
 
 # 啟動 AI Server
 CMD ["uvicorn", "agent.ai_server:app", "--host", "0.0.0.0", "--port", "8000"]
-
