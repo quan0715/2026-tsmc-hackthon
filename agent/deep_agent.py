@@ -149,9 +149,16 @@ class RefactorAgent:
         )
 
         # 準備 middleware 列表
-        # 注意：當 checkpointer 啟用時，SummarizationMiddleware 可能已被自動添加
-        # 暫時不手動添加 middleware，避免重複
-        middleware = []
+        # 啟用 SummarizationMiddleware 來自動壓縮過長的對話歷史
+        middleware = [
+            SummarizationMiddleware(
+                model=self.model,
+                # 當訊息數量超過 50 條時觸發壓縮
+                trigger=("messages", 50),
+                # 壓縮後保留最近的 20 條訊息
+                keep=("messages", 20),
+            )
+        ]
 
         self.agent = create_deep_agent(
             model=self.model,

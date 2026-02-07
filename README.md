@@ -1,4 +1,6 @@
-# AI 舊程式碼智能重構系統
+# Reforge
+
+AI Refactoring. Measured. Continuous.
 
 基於 LangChain Deep Agents 的智能程式碼分析與重構服務，提供隔離的 Docker 容器環境進行安全的程式碼重構。
 
@@ -41,27 +43,27 @@ Dockerfile 位置：
 
 ### 啟動服務
 
-**使用 Docker Compose（推薦）**
+**Docker Compose（開發/測試）**
 
 ```bash
-# 啟動所有服務（MongoDB + Backend API + Frontend）
-docker-compose -f devops/docker-compose.dev.yml up -d
+# 啟動所有服務（PostgreSQL + MongoDB + Backend API + Frontend）
+docker-compose -f devops/docker-compose.yml up -d
 
 # 查看服務狀態
-docker-compose -f devops/docker-compose.dev.yml ps
+docker-compose -f devops/docker-compose.yml ps
 
 # 查看日誌
-docker-compose -f devops/docker-compose.dev.yml logs -f api
+docker-compose -f devops/docker-compose.yml logs -f api
 
 # 停止服務
-docker-compose -f devops/docker-compose.dev.yml down
+docker-compose -f devops/docker-compose.yml down
 ```
 
 **GCE 單機（正式環境）**
 
-- 先將 `refactor-base` / `refactor-api` / `refactor-frontend` 映像推送到 Artifact Registry
-- 設定 `REGISTRY_HOST` / `GCP_PROJECT_ID` / `GAR_REPOSITORY` / `IMAGE_TAG` 後，用 `devops/docker-compose.prod.yml` 啟動（會從 Artifact Registry 拉取映像）
-- 也可直接使用 `./scripts/deploy-prod.sh`（會先 pull + 啟動）
+- 使用 `devops/docker-compose.prod.yml`
+- 設定 `REGISTRY_HOST` / `GCP_PROJECT_ID` / `GAR_REPOSITORY` / `IMAGE_TAG`
+- 映像從 Artifact Registry 拉取
 
 服務端點：
 - Frontend: http://localhost:5173
@@ -106,7 +108,6 @@ curl -X POST http://localhost:8000/api/v1/auth/login \
 ### 2. 建立專案
 
 ```bash
-# 建立專案
 curl -X POST http://localhost:8000/api/v1/projects \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
@@ -120,7 +121,6 @@ curl -X POST http://localhost:8000/api/v1/projects \
 ### 3. Provision 專案
 
 ```bash
-# Provision 專案（建立隔離容器並 clone repository）
 curl -X POST http://localhost:8000/api/v1/projects/{project_id}/provision \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
@@ -143,16 +143,10 @@ curl -N http://localhost:8000/api/v1/projects/{project_id}/agent/runs/{run_id}/s
 
 ## 測試
 
-### E2E 測試
-
 ```bash
 # 執行完整 E2E 測試
 ./test_cloud_run_e2e_v2.sh
-```
 
-### Base Image 測試
-
-```bash
 # 測試 base image 建置
 export ANTHROPIC_API_KEY=your-api-key
 ./test_base_image.sh
@@ -162,65 +156,44 @@ export ANTHROPIC_API_KEY=your-api-key
 
 ```
 ┌─────────────┐      HTTP      ┌──────────────────┐
-│   Frontend  │ ◄─────────────► │   Backend API    │
-│ (React/Vite)│                 │    (FastAPI)     │
-└─────────────┘                 └────────┬─────────┘
-                                         │
-                        ┌────────────────┼────────────────┐
-                        │                │                │
-                        ▼                ▼                ▼
-                  ┌──────────┐   ┌──────────────┐  ┌──────────┐
-                  │ MongoDB  │   │Docker Network│  │ Project  │
-                  │          │   │              │  │Container │
-                  └──────────┘   └──────┬───────┘  └────┬─────┘
-                                        │               │
-                                        │    HTTP       │
-                                        └───────────────┤
-                                                        │
-                                                  ┌─────▼──────┐
-                                                  │ AI Server  │
-                                                  │  (FastAPI) │
-                                                  │            │
-                                                  │ Deep Agent │
-                                                  └────────────┘
+│   Frontend  │ <────────────> │   Backend API    │
+│ (React/Vite)│                │    (FastAPI)     │
+└─────────────┘                └────────┬─────────┘
+                                        │
+                       ┌────────────────┼────────────────┐
+                       │                │                │
+                       v                v                v
+                 ┌──────────┐   ┌──────────────┐  ┌──────────┐
+                 │ MongoDB  │   │Docker Network│  │ Project  │
+                 │          │   │              │  │Container │
+                 └──────────┘   └──────┬───────┘  └────┬─────┘
+                                       │               │
+                                       │    HTTP       │
+                                       └───────────────┤
+                                                       │
+                                                 ┌─────v──────┐
+                                                 │ AI Server  │
+                                                 │  (FastAPI) │
+                                                 │            │
+                                                 │ Deep Agent │
+                                                 └────────────┘
 ```
-
-### 核心特性
-
-- **隔離環境**: 每個專案在獨立的 Docker 容器中執行
-- **AI Server**: 容器內建 FastAPI HTTP Server，提供 Agent 執行介面
-- **異步任務**: 支援長時間執行的 Agent 任務（無 timeout 限制）
-- **實時日誌**: SSE 串流提供 Agent 執行過程的實時日誌
-- **JWT 認證**: 安全的使用者認證機制
 
 ## 技術棧
 
-- **Backend**: FastAPI, Python 3.11, MongoDB
+- **Backend**: FastAPI, Python 3.11, MongoDB, PostgreSQL
 - **Frontend**: React 18, Vite, TypeScript, Tailwind CSS, shadcn/ui
 - **AI/ML**: LangChain, Deep Agents, Anthropic Claude
 - **容器**: Docker, Docker Compose
 - **認證**: JWT (JSON Web Tokens)
 
-## 📚 文件
+## 文件
 
-### 完整文件導覽
-
-請參閱 **[docs/](./docs/)** 資料夾：
-
-- **[docs/API.md](./docs/API.md)** - REST API 完整規格（詳細的 Request/Response）
-- **[docs/BACKEND.md](./docs/BACKEND.md)** - 後端技術文件（架構、服務層、部署）
-- **[docs/guides/](./docs/guides/)** - 使用指南（CLI 工具等）
+- **[docs/API.md](./docs/API.md)** - REST API 完整規格
+- **[docs/BACKEND.md](./docs/BACKEND.md)** - 後端技術文件
+- **[docs/guides/](./docs/guides/)** - 使用指南
 - **[docs/testing/](./docs/testing/)** - 測試文件
-
-### 開發指引
-
-- [CLAUDE.md](./CLAUDE.md) - Claude Code 專案指引
-- [docs/README.md](./docs/README.md) - 文件索引
-
-### API 文件
-
-- **Swagger UI**: http://localhost:8000/docs（互動式 API 文件）
-- **詳細規格**: [docs/API.md](./docs/API.md)（完整的 Request/Response 範例）
+- **[CLAUDE.md](./CLAUDE.md)** - Claude Code 專案指引
 
 ## 常見問題
 
@@ -235,14 +208,13 @@ docker images | grep refactor-base
 
 1. 檢查容器內 AI Server 的 LLM API Key 設定
 2. 查看容器日誌：`docker logs refactor-project-{project_id}`
-3. 檢查 API 日誌：`docker-compose -f devops/docker-compose.dev.yml logs -f api`
-4. 查看 Agent 執行日誌：使用 SSE stream 端點
+3. 檢查 API 日誌：`docker-compose -f devops/docker-compose.yml logs -f api`
 
 ### 如何清理測試資料？
 
 ```bash
 # 停止並移除所有容器和資料
-docker-compose -f devops/docker-compose.dev.yml down -v
+docker-compose -f devops/docker-compose.yml down -v
 
 # 清理專案容器
 docker ps -a | grep refactor-project | awk '{print $1}' | xargs docker rm -f

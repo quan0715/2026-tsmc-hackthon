@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import type { Project } from '@/types/project.types'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface ProjectSettingsModalProps {
   project: Project
@@ -83,22 +84,22 @@ export function ProjectSettingsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative bg-gray-900 border border-gray-700 rounded-lg w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
+      <div className="relative bg-background border border-border rounded-lg w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 className="text-lg font-medium">專案設定</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-white">
+          <button onClick={onClose} className="text-muted-foreground hover:text-white">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-700">
+        <div className="flex border-b border-border">
           <button
             className={`px-4 py-2 text-sm ${
               activeTab === 'general'
-                ? 'text-white border-b-2 border-purple-500'
-                : 'text-gray-400 hover:text-white'
+                ? 'text-white border-b-2 border-brand-blue-500'
+                : 'text-muted-foreground hover:text-white'
             }`}
             onClick={() => setActiveTab('general')}
           >
@@ -107,8 +108,8 @@ export function ProjectSettingsModal({
           <button
             className={`px-4 py-2 text-sm ${
               activeTab === 'danger'
-                ? 'text-white border-b-2 border-purple-500'
-                : 'text-gray-400 hover:text-white'
+                ? 'text-white border-b-2 border-brand-blue-500'
+                : 'text-muted-foreground hover:text-white'
             }`}
             onClick={() => setActiveTab('danger')}
           >
@@ -117,11 +118,12 @@ export function ProjectSettingsModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <ScrollArea className="flex-1">
+        <div className="p-4">
           {activeTab === 'general' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">專案名稱</label>
+                <label className="block text-sm text-muted-foreground mb-1">專案名稱</label>
                 <Input
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -129,7 +131,7 @@ export function ProjectSettingsModal({
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">描述</label>
+                <label className="block text-sm text-muted-foreground mb-1">描述</label>
                 <Input
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
@@ -137,16 +139,16 @@ export function ProjectSettingsModal({
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Repository</label>
+                <label className="block text-sm text-muted-foreground mb-1">Repository</label>
                 <Input
                   value={project.repo_url || ''}
                   disabled
                   className="opacity-50"
                 />
-                <p className="text-xs text-gray-500 mt-1">Repository URL 無法修改</p>
+                <p className="text-xs text-muted-foreground mt-1">Repository URL 無法修改</p>
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">Spec</label>
+                <label className="block text-sm text-muted-foreground mb-1">Spec</label>
                 <Textarea
                   value={spec}
                   onChange={(e) => setSpec(e.target.value)}
@@ -155,9 +157,9 @@ export function ProjectSettingsModal({
                 />
               </div>
 
-              <div className="p-4 bg-gray-800 border border-gray-700 rounded-lg">
+              <div className="p-4 bg-secondary border border-border rounded-lg">
                 <h3 className="text-sm font-medium mb-2">匯出 Workspace</h3>
-                <p className="text-xs text-gray-400 mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                   下載整個 workspace 的內容為壓縮檔案 (tar.gz)
                 </p>
                 <Button
@@ -177,7 +179,7 @@ export function ProjectSettingsModal({
             <div className="space-y-4">
               <div className="p-4 bg-yellow-900/20 border border-yellow-700/50 rounded-lg">
                 <h3 className="text-sm font-medium text-yellow-400 mb-2">重置重構會話</h3>
-                <p className="text-xs text-gray-400 mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                   清除所有對話歷史，下次重構將從頭開始。
                 </p>
                 <Button
@@ -193,7 +195,7 @@ export function ProjectSettingsModal({
 
               <div className="p-4 bg-orange-900/20 border border-orange-700/50 rounded-lg">
                 <h3 className="text-sm font-medium text-orange-400 mb-2">重設專案</h3>
-                <p className="text-xs text-gray-400 mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                   刪除容器並重新 provision，所有本地修改將遺失。
                 </p>
                 <Button
@@ -208,7 +210,7 @@ export function ProjectSettingsModal({
 
               <div className="p-4 bg-red-900/20 border border-red-700/50 rounded-lg">
                 <h3 className="text-sm font-medium text-red-400 mb-2">刪除專案</h3>
-                <p className="text-xs text-gray-400 mb-3">
+                <p className="text-xs text-muted-foreground mb-3">
                   永久刪除此專案和所有相關資料，此操作無法復原。
                 </p>
                 <Button
@@ -223,10 +225,11 @@ export function ProjectSettingsModal({
             </div>
           )}
         </div>
+        </ScrollArea>
 
         {/* Footer */}
         {activeTab === 'general' && (
-          <div className="flex justify-end gap-2 px-4 py-3 border-t border-gray-700">
+          <div className="flex justify-end gap-2 px-4 py-3 border-t border-border">
             <Button variant="ghost" onClick={onClose}>
               取消
             </Button>
