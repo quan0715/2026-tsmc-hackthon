@@ -148,17 +148,8 @@ class RefactorAgent:
             f"持久化: PostgreSQL (checkpointer + store)"
         )
 
-        # 準備 middleware 列表
-        # 啟用 SummarizationMiddleware 來自動壓縮過長的對話歷史
-        middleware = [
-            SummarizationMiddleware(
-                model=self.model,
-                # 當訊息數量超過 50 條時觸發壓縮
-                trigger=("messages", 50),
-                # 壓縮後保留最近的 20 條訊息
-                keep=("messages", 20),
-            )
-        ]
+        # middleware 由 create_deep_agent 在啟用 checkpointer 時自動管理
+        middleware = []
 
         self.agent = create_deep_agent(
             model=self.model,
