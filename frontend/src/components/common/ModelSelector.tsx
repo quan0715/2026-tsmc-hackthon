@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { getAvailableModelsAPI } from '@/services/models.service'
 import type { ModelInfo } from '@/types/model.types'
 import { ChevronDown } from 'lucide-react'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface Props {
   value?: string
@@ -67,17 +68,17 @@ export function ModelSelector({ value, onChange, disabled }: Props) {
         type="button"
         onClick={() => !disabled && setOpen(!open)}
         disabled={disabled}
-        className="flex items-center gap-1 px-2 py-0.5 text-xs text-gray-400 hover:text-gray-200 rounded hover:bg-gray-700/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="flex items-center gap-1 px-2 py-0.5 text-xs text-muted-foreground hover:text-secondary-foreground rounded hover:bg-secondary/50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         <span className="truncate max-w-[180px]">{displayName}</span>
         <ChevronDown className="w-3 h-3 flex-shrink-0" />
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 mb-1 w-72 max-h-80 overflow-y-auto bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50">
+        <ScrollArea className="absolute bottom-full left-0 mb-1 w-72 max-h-80 bg-secondary border border-border rounded-lg shadow-xl z-50">
           {Object.entries(grouped).map(([provider, providerModels]) => (
             <div key={provider}>
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 uppercase tracking-wider sticky top-0 bg-gray-800">
+              <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider sticky top-0 bg-secondary">
                 {provider}
               </div>
               {providerModels.map((model) => (
@@ -88,17 +89,17 @@ export function ModelSelector({ value, onChange, disabled }: Props) {
                     onChange(model.id)
                     setOpen(false)
                   }}
-                  className={`w-full text-left px-3 py-1.5 hover:bg-gray-700/60 transition-colors ${
-                    model.id === value ? 'bg-gray-700/40' : ''
+                  className={`w-full text-left px-3 py-1.5 hover:bg-secondary/60 transition-colors ${
+                    model.id === value ? 'bg-secondary/40' : ''
                   }`}
                 >
-                  <div className="text-xs font-medium text-gray-200">{model.display_name}</div>
-                  <div className="text-[10px] text-gray-500 mt-0.5">{model.description}</div>
+                  <div className="text-xs font-medium text-secondary-foreground">{model.display_name}</div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">{model.description}</div>
                 </button>
               ))}
             </div>
           ))}
-        </div>
+        </ScrollArea>
       )}
     </div>
   )

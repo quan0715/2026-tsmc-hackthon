@@ -96,23 +96,23 @@ export const FileViewer = memo(function FileViewer({
 
   if (files.length === 0) {
     return (
-      <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
+      <div className="h-full flex items-center justify-center bg-background text-muted-foreground">
         <EmptyState title="No file open" description="Select a file from the explorer" />
       </div>
     )
   }
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
+    <div className="h-full flex flex-col bg-background">
       {/* Tabs */}
-      <div className="flex items-center bg-gray-950 border-b border-gray-800 overflow-x-auto">
+      <div className="flex items-center bg-background border-b border-border overflow-x-auto">
         {files.map((file) => (
           <div
             key={file.path}
-            className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer border-r border-gray-800 min-w-0 ${
+            className={`flex items-center gap-2 px-3 py-2 text-sm cursor-pointer border-r border-border min-w-0 ${
               file.path === activeFilePath
-                ? 'bg-gray-900 text-white'
-                : 'bg-gray-950 text-gray-400 hover:bg-gray-900'
+                ? 'bg-background text-white'
+                : 'bg-background text-muted-foreground hover:bg-background'
             }`}
             onClick={() => onTabSelect(file.path)}
           >
@@ -122,7 +122,7 @@ export const FileViewer = memo(function FileViewer({
               <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
             ) : (
               <button
-                className="hover:bg-gray-700 rounded p-0.5 flex-shrink-0"
+                className="hover:bg-secondary rounded p-0.5 flex-shrink-0"
                 onClick={(e) => {
                   e.stopPropagation()
                   onTabClose(file.path)
@@ -139,7 +139,7 @@ export const FileViewer = memo(function FileViewer({
       <div className="flex-1 overflow-auto">
         {activeFile?.isLoading ? (
           <div className="h-full flex items-center justify-center">
-            <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         ) : activeFile ? (
           activeFile.name.endsWith('.md') ? (

@@ -42,13 +42,13 @@ export default function CreateProjectPage() {
       if (match) {
         const [, owner, repo] = match
         const correctedUrl = `https://github.com/${owner}/${repo}.git`
-        setUrlWarning('⚠️ 您輸入的是 GitHub 網頁 URL，而不是 Git repository URL')
+        setUrlWarning('您輸入的是 GitHub 網頁 URL，而不是 Git repository URL')
         setSuggestedUrl(correctedUrl)
       }
     }
     // 檢測 GitHub URL 但缺少 .git
     else if (url.match(/^https?:\/\/github\.com\/[^\/]+\/[^\/]+$/) && !url.endsWith('.git')) {
-      setUrlWarning('💡 建議在 GitHub URL 後加上 .git 後綴')
+      setUrlWarning('建議在 GitHub URL 後加上 .git 後綴')
       setSuggestedUrl(`${url}.git`)
     }
   }
@@ -135,9 +135,9 @@ export default function CreateProjectPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-gray-100">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Header */}
-      <div className="bg-gray-900 border-b border-gray-800">
+      <div className="bg-background border-b border-border">
         <div className="container mx-auto px-4 py-4">
           <Link to="/projects">
             <Button variant="ghost" size="sm">
@@ -159,7 +159,7 @@ export default function CreateProjectPage() {
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* 專案類型選擇 */}
               <div>
-                <label className="block text-sm font-medium mb-3 text-gray-200">
+                <label className="block text-sm font-medium mb-3 text-foreground">
                   專案類型
                 </label>
                 <div className="grid grid-cols-2 gap-4">
@@ -168,15 +168,15 @@ export default function CreateProjectPage() {
                     onClick={() => setProjectType(ProjectType.REFACTOR)}
                     className={`p-4 rounded-lg border-2 transition-all text-left ${
                       projectType === ProjectType.REFACTOR
-                        ? 'border-blue-500 bg-blue-900/30'
-                        : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                        ? 'border-brand-blue-500 bg-brand-blue-500/10'
+                        : 'border-border bg-secondary hover:border-muted-foreground/30'
                     }`}
                   >
                     <GitBranch className={`w-6 h-6 mb-2 ${
-                      projectType === ProjectType.REFACTOR ? 'text-blue-400' : 'text-gray-400'
+                      projectType === ProjectType.REFACTOR ? 'text-brand-blue-400' : 'text-muted-foreground'
                     }`} />
-                    <div className="font-medium text-gray-200">重構專案</div>
-                    <div className="text-xs text-gray-400 mt-1">
+                    <div className="font-medium text-foreground">重構專案</div>
+                    <div className="text-xs text-muted-foreground mt-1">
                       Clone 一個 Git repository 進行程式碼重構
                     </div>
                   </button>
@@ -185,15 +185,15 @@ export default function CreateProjectPage() {
                     onClick={() => setProjectType(ProjectType.SANDBOX)}
                     className={`p-4 rounded-lg border-2 transition-all text-left ${
                       projectType === ProjectType.SANDBOX
-                        ? 'border-purple-500 bg-purple-900/30'
-                        : 'border-gray-700 bg-gray-800 hover:border-gray-600'
+                        ? 'border-brand-gold-500 bg-brand-gold-500/10'
+                        : 'border-border bg-secondary hover:border-muted-foreground/30'
                     }`}
                   >
                     <MessageSquare className={`w-6 h-6 mb-2 ${
-                      projectType === ProjectType.SANDBOX ? 'text-purple-400' : 'text-gray-400'
+                      projectType === ProjectType.SANDBOX ? 'text-brand-gold-500' : 'text-muted-foreground'
                     }`} />
-                    <div className="font-medium text-gray-200">沙盒測試</div>
-                    <div className="text-xs text-gray-400 mt-1">
+                    <div className="font-medium text-foreground">沙盒測試</div>
+                    <div className="text-xs text-muted-foreground mt-1">
                       建立空的工作空間，與 AI Agent 自由對話
                     </div>
                   </button>
@@ -202,7 +202,7 @@ export default function CreateProjectPage() {
 
               {/* 專案標題 */}
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-200">
+                <label className="block text-sm font-medium mb-2 text-foreground">
                   專案標題
                 </label>
                 <Input
@@ -214,7 +214,7 @@ export default function CreateProjectPage() {
 
               {/* 專案描述 */}
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-200">
+                <label className="block text-sm font-medium mb-2 text-foreground">
                   專案描述
                 </label>
                 <Textarea
@@ -228,7 +228,7 @@ export default function CreateProjectPage() {
               {/* Repository URL - 只在 REFACTOR 類型顯示 */}
               {projectType === ProjectType.REFACTOR && (
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-200">
+                  <label className="block text-sm font-medium mb-2 text-foreground">
                     Repository URL *
                   </label>
                   <Input
@@ -238,7 +238,7 @@ export default function CreateProjectPage() {
                     required
                     className={urlWarning ? 'border-yellow-500' : ''}
                   />
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     支援 HTTPS 和 SSH 格式的 Git repository URL
                   </p>
 
@@ -266,7 +266,7 @@ export default function CreateProjectPage() {
                   )}
 
                   {/* 範例說明 */}
-                  <div className="mt-2 text-xs text-gray-400">
+                  <div className="mt-2 text-xs text-muted-foreground">
                     <p className="font-medium mb-1">正確格式範例：</p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
                       <li className="font-mono">https://github.com/username/repo.git</li>
@@ -279,7 +279,7 @@ export default function CreateProjectPage() {
               {/* Branch - 只在 REFACTOR 類型顯示 */}
               {projectType === ProjectType.REFACTOR && (
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-200">
+                  <label className="block text-sm font-medium mb-2 text-foreground">
                     分支 *
                   </label>
                   <select
@@ -287,7 +287,7 @@ export default function CreateProjectPage() {
                     onChange={(e) => setBranch(e.target.value)}
                     required
                     disabled={branchesLoading || !repoUrl.trim() || branches.length === 0}
-                    className="flex h-10 w-full rounded-md border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="flex h-10 w-full rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {branchesLoading && <option value={branch || 'main'}>載入分支中...</option>}
                     {!branchesLoading && branches.length === 0 && (
@@ -300,7 +300,7 @@ export default function CreateProjectPage() {
                         </option>
                       ))}
                   </select>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-muted-foreground mt-1">
                     {branchesLoading
                       ? '正在從 GitHub 取得分支列表...'
                       : branches.length > 0
@@ -316,7 +316,7 @@ export default function CreateProjectPage() {
               )}
 
               <div>
-                <label className="block text-sm font-medium mb-2 text-gray-200">
+                <label className="block text-sm font-medium mb-2 text-foreground">
                   {projectType === ProjectType.SANDBOX ? '初始訊息 *' : 'Spec *'}
                 </label>
                 <Textarea
@@ -330,7 +330,7 @@ export default function CreateProjectPage() {
                   rows={6}
                   required
                 />
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   {projectType === ProjectType.SANDBOX
                     ? '這將作為與 AI Agent 的第一則對話訊息'
                     : '描述重構目標、期望結果和任何特定規格要求'}

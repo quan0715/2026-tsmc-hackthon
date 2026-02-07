@@ -14,6 +14,7 @@ import { ToastContainer } from '@/components/ui/toast'
 import { ProjectStatusBadge } from '@/components/project/ProjectStatusBadge'
 import { ChatSessionList } from '@/components/chat/ChatSessionList'
 import { PanelHeader } from '@/components/layout/PanelHeader'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { apiErrorMessage } from '@/utils/apiError'
 import { useProject } from '@/hooks/useProject'
 import { useAgentRuns } from '@/hooks/useAgentRuns'
@@ -163,8 +164,8 @@ export default function ProjectDetailPage() {
   // Loading state
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-900">
-        <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
+      <div className="h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-brand-blue-500" />
       </div>
     )
   }
@@ -185,13 +186,13 @@ export default function ProjectDetailPage() {
   const needsProvision = project.status === 'CREATED' || project.status === 'FAILED'
 
   return (
-    <div className="h-screen flex flex-col bg-gray-900 text-gray-100">
+    <div className="h-screen flex flex-col bg-background text-foreground">
       {/* Header Bar */}
-      <header className="h-10 flex items-center justify-between px-3 border-b border-gray-700 bg-gray-800 flex-shrink-0">
+      <header className="h-10 flex items-center justify-between px-3 border-b border-border bg-secondary flex-shrink-0">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setInfoCollapsed(!infoCollapsed)}
-            className="p-1 hover:bg-gray-700 rounded"
+            className="p-1 hover:bg-secondary rounded"
             title={infoCollapsed ? 'Expand left panel' : 'Collapse left panel'}
           >
             {infoCollapsed ? (
@@ -200,7 +201,7 @@ export default function ProjectDetailPage() {
               <PanelLeftClose className="w-4 h-4" />
             )}
           </button>
-          <Link to="/projects" className="text-gray-400 hover:text-white">
+          <Link to="/projects" className="text-muted-foreground hover:text-white">
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <h1 className="text-sm font-medium truncate" title={projectName}>
@@ -213,7 +214,7 @@ export default function ProjectDetailPage() {
             <button
               onClick={handleExport}
               disabled={isExporting}
-              className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white disabled:opacity-50"
+              className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-white disabled:opacity-50"
               title="匯出 Workspace"
             >
               {isExporting ? (
@@ -225,13 +226,13 @@ export default function ProjectDetailPage() {
           )}
           <button
             onClick={() => setShowSettings(true)}
-            className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white"
+            className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-white"
           >
             <Settings className="w-4 h-4" />
           </button>
           <button
             onClick={() => setTreeCollapsed(!treeCollapsed)}
-            className="p-1 hover:bg-gray-700 rounded"
+            className="p-1 hover:bg-secondary rounded"
             title={treeCollapsed ? 'Expand right panel' : 'Collapse right panel'}
           >
             {treeCollapsed ? (
@@ -249,19 +250,19 @@ export default function ProjectDetailPage() {
         {!infoCollapsed && (
           <>
             <Panel id="info" defaultSize="15%" minSize="10%" maxSize="25%">
-              <div className="h-full flex flex-col border-r border-gray-800">
+              <div className="h-full flex flex-col border-r border-border">
                 <PanelHeader title="Info" />
-                <div className="p-2 space-y-2 text-xs border-b border-gray-800">
-                  <div className="flex justify-between text-gray-400">
+                <div className="p-2 space-y-2 text-xs border-b border-border">
+                  <div className="flex justify-between text-muted-foreground">
                     <span>Iteration</span>
                     <span className="text-white">#{currentRun?.iteration_index || 0}</span>
                   </div>
-                  <div className="flex justify-between text-gray-400">
+                  <div className="flex justify-between text-muted-foreground">
                     <span>Runtime</span>
                     <span className="text-white font-mono">{runtime}</span>
                   </div>
                   {currentRun && (
-                    <div className="flex justify-between text-gray-400">
+                    <div className="flex justify-between text-muted-foreground">
                       <span>Phase</span>
                       <span className="text-white capitalize">{currentRun.phase}</span>
                     </div>
@@ -277,15 +278,17 @@ export default function ProjectDetailPage() {
                 />
 
                 {tasks.length > 0 && (
-                  <div className="flex-1 overflow-y-auto p-2">
-                    <TaskList tasks={tasks} compact />
-                  </div>
+                  <ScrollArea className="flex-1">
+                    <div className="p-2">
+                      <TaskList tasks={tasks} compact />
+                    </div>
+                  </ScrollArea>
                 )}
 
                 {tasks.length === 0 && <div className="flex-1" />}
 
                 {needsProvision && (
-                  <div className="p-2 space-y-2 border-t border-gray-800">
+                  <div className="p-2 space-y-2 border-t border-border">
                     <Button className="w-full" size="sm" onClick={handleProvision} disabled={isProvisioning}>
                       {isProvisioning ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RefreshCw className="w-4 h-4 mr-1" />}
                       Provision
@@ -294,15 +297,15 @@ export default function ProjectDetailPage() {
                 )}
               </div>
             </Panel>
-            <Separator className="w-1 bg-gray-700 hover:bg-purple-600 transition-colors flex items-center justify-center">
-              <GripVertical className="w-3 h-3 text-gray-500" />
+            <Separator className="w-1 bg-border hover:bg-brand-blue-600 transition-colors flex items-center justify-center">
+              <GripVertical className="w-3 h-3 text-muted-foreground" />
             </Separator>
           </>
         )}
 
         {/* Panel 2: Chat */}
         <Panel id="chat" defaultSize="25%" minSize="10%" maxSize="50%">
-          <div className="h-full flex flex-col border-r border-gray-800">
+          <div className="h-full flex flex-col border-r border-border">
             <PanelHeader title="Chat" />
             <div className="flex-1 overflow-hidden">
               <ChatPanel
@@ -322,8 +325,8 @@ export default function ProjectDetailPage() {
           </div>
         </Panel>
 
-        <Separator className="w-px bg-gray-800 hover:bg-gray-700 transition-colors flex items-center justify-center">
-          <GripVertical className="w-2 h-2 text-gray-600 opacity-60" />
+        <Separator className="w-px bg-secondary hover:bg-secondary transition-colors flex items-center justify-center">
+          <GripVertical className="w-2 h-2 text-muted-foreground/60 opacity-60" />
         </Separator>
 
         {/* Panel 3: File Viewer (main area) */}
@@ -338,21 +341,21 @@ export default function ProjectDetailPage() {
           </div>
         </Panel>
 
-        <Separator className="w-px bg-gray-800 hover:bg-gray-700 transition-colors flex items-center justify-center">
-          <GripVertical className="w-2 h-2 text-gray-600 opacity-60" />
+        <Separator className="w-px bg-secondary hover:bg-secondary transition-colors flex items-center justify-center">
+          <GripVertical className="w-2 h-2 text-muted-foreground/60 opacity-60" />
         </Separator>
 
         {/* Panel 4: File Tree */}
         {!treeCollapsed && (
           <Panel id="tree" defaultSize="20%" minSize="10%" maxSize="35%">
-            <div className="h-full flex flex-col border-l border-gray-800">
+            <div className="h-full flex flex-col border-l border-border">
               <PanelHeader
                 title="Explorer"
                 right={(
                   <button
                     onClick={loadFileTree}
                     disabled={loadingTree}
-                    className="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white disabled:opacity-50"
+                    className="p-1 hover:bg-secondary rounded text-muted-foreground hover:text-white disabled:opacity-50"
                     title="Refresh"
                   >
                     <RefreshCw className={`w-3 h-3 ${loadingTree ? 'animate-spin' : ''}`} />
@@ -362,7 +365,7 @@ export default function ProjectDetailPage() {
               <div className="flex-1 overflow-hidden">
                 {loadingTree ? (
                   <div className="h-full flex items-center justify-center">
-                    <Loader2 className="w-6 h-6 animate-spin text-gray-500" />
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                   </div>
                 ) : (
                   <FileTree

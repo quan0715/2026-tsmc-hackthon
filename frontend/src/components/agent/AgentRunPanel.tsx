@@ -4,6 +4,7 @@ import { useAgentRunStream } from '@/hooks/useAgentRunStream'
 import { Loader2, AlertCircle, CheckCircle, Square, Play } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { TaskList, type Task } from './TaskList'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface Props {
   projectId: string
@@ -68,7 +69,7 @@ export function AgentRunPanel({ projectId, currentRun, onTasksUpdate, onReconnec
 
   if (!currentRun) {
     return (
-      <div className="h-full flex flex-col items-center justify-center text-gray-500 px-4">
+      <div className="h-full flex flex-col items-center justify-center text-muted-foreground px-4">
         <Play className="w-12 h-12 mb-4 opacity-50" />
         <p className="text-sm">尚未啟動 Agent Run</p>
         <p className="text-xs mt-2">點擊「開始重構」按鈕來啟動</p>
@@ -77,28 +78,28 @@ export function AgentRunPanel({ projectId, currentRun, onTasksUpdate, onReconnec
   }
 
   const statusConfig = {
-    RUNNING: { icon: Loader2, color: 'text-purple-400', spin: true, label: '執行中' },
+    RUNNING: { icon: Loader2, color: 'text-brand-blue-400', spin: true, label: '執行中' },
     DONE: { icon: CheckCircle, color: 'text-green-400', spin: false, label: '完成' },
     FAILED: { icon: AlertCircle, color: 'text-red-400', spin: false, label: '失敗' },
-    STOPPED: { icon: Square, color: 'text-gray-400', spin: false, label: '已停止' },
+    STOPPED: { icon: Square, color: 'text-muted-foreground', spin: false, label: '已停止' },
   }
 
   const status = statusConfig[currentRun.status] || statusConfig.STOPPED
   const StatusIcon = status.icon
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="flex-shrink-0 px-3 py-2 border-b border-gray-800 bg-gray-800/50">
+      <div className="flex-shrink-0 px-3 py-2 border-b border-border bg-secondary/50">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <StatusIcon className={`w-4 h-4 ${status.color} ${status.spin ? 'animate-spin' : ''}`} />
             <span className="text-sm font-medium">{status.label}</span>
             {isReconnecting && (
-              <span className="text-xs text-purple-400 animate-pulse">重新連線中...</span>
+              <span className="text-xs text-brand-blue-400 animate-pulse">重新連線中...</span>
             )}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-muted-foreground">
             Run #{currentRun.id.slice(0, 8)}
           </div>
         </div>
@@ -111,31 +112,33 @@ export function AgentRunPanel({ projectId, currentRun, onTasksUpdate, onReconnec
 
       {/* Tasks */}
       {tasks.length > 0 && (
-        <div className="flex-shrink-0 border-b border-gray-800 max-h-48 overflow-y-auto">
+        <ScrollArea className="flex-shrink-0 border-b border-border max-h-48">
           <TaskList tasks={tasks} compact />
-        </div>
+        </ScrollArea>
       )}
 
       {/* Logs */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 text-xs font-mono">
-        {logs.length === 0 && isRunning && (
-          <div className="text-center text-gray-500 py-8">
-            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-            <p>等待日誌...</p>
-          </div>
-        )}
+      <ScrollArea className="flex-1">
+        <div className="p-3 space-y-2 text-xs font-mono">
+          {logs.length === 0 && isRunning && (
+            <div className="text-center text-muted-foreground py-8">
+              <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+              <p>等待日誌...</p>
+            </div>
+          )}
 
-        {logs.map((log, index) => (
-          <LogEntry key={index} log={log} />
-        ))}
+          {logs.map((log, index) => (
+            <LogEntry key={index} log={log} />
+          ))}
 
-        <div ref={logsEndRef} />
-      </div>
+          <div ref={logsEndRef} />
+        </div>
+      </ScrollArea>
 
       {/* Footer */}
       {isStreaming && (
-        <div className="flex-shrink-0 px-3 py-2 border-t border-gray-800 bg-gray-800/30">
-          <div className="flex items-center gap-2 text-xs text-gray-500">
+        <div className="flex-shrink-0 px-3 py-2 border-t border-border bg-secondary/30">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             <span>即時串流中</span>
           </div>
@@ -150,7 +153,7 @@ function LogEntry({ log }: { log: LogEntry }) {
     switch (log.type) {
       case 'ai_content':
         return (
-          <div className="text-gray-300 prose prose-sm max-w-none">
+          <div className="text-secondary-foreground prose prose-sm max-w-none">
             <ReactMarkdown>{log.content.text || ''}</ReactMarkdown>
           </div>
         )
@@ -161,7 +164,7 @@ function LogEntry({ log }: { log: LogEntry }) {
           <div className="text-blue-400">
             🔧 呼叫工具: {log.content.tool_name || log.content.name || '未知'}
             {log.content.args && (
-              <pre className="ml-4 mt-1 text-gray-500 text-xs overflow-x-auto">
+              <pre className="ml-4 mt-1 text-muted-foreground text-xs overflow-x-auto">
                 {JSON.stringify(log.content.args, null, 2)}
               </pre>
             )}
@@ -173,7 +176,7 @@ function LogEntry({ log }: { log: LogEntry }) {
           <div className="text-green-400">
             ✓ 工具結果
             {log.content.output && (
-              <pre className="ml-4 mt-1 text-gray-400 text-xs overflow-x-auto max-h-32">
+              <pre className="ml-4 mt-1 text-muted-foreground text-xs overflow-x-auto max-h-32">
                 {typeof log.content.output === 'string'
                   ? log.content.output
                   : JSON.stringify(log.content.output, null, 2)}
@@ -191,28 +194,28 @@ function LogEntry({ log }: { log: LogEntry }) {
 
       case 'token_usage':
         return (
-          <div className="text-gray-500">
+          <div className="text-muted-foreground">
             📊 Token 使用: 輸入 {log.content.input_tokens || 0} / 輸出 {log.content.output_tokens || 0}
           </div>
         )
 
       case 'status':
         return (
-          <div className="text-purple-400">
+          <div className="text-brand-blue-400">
             📌 狀態: {log.content.status || '未知'}
           </div>
         )
 
       case 'log':
         return (
-          <div className="text-gray-400">
+          <div className="text-muted-foreground">
             {log.content.message || JSON.stringify(log.content)}
           </div>
         )
 
       default:
         return (
-          <div className="text-gray-500">
+          <div className="text-muted-foreground">
             {JSON.stringify(log.content)}
           </div>
         )
@@ -220,8 +223,8 @@ function LogEntry({ log }: { log: LogEntry }) {
   }
 
   return (
-    <div className="border-l-2 border-gray-800 pl-3 py-1">
-      <div className="text-gray-600 text-xs mb-1">
+    <div className="border-l-2 border-border pl-3 py-1">
+      <div className="text-muted-foreground/60 text-xs mb-1">
         [{new Date(log.timestamp).toLocaleTimeString()}] {log.type}
       </div>
       {renderContent()}
