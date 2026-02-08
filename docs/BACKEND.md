@@ -165,9 +165,13 @@ class ProjectStatus(str, Enum):
 
 class Project(BaseModel):
     id: str                       # MongoDB _id
-    repo_url: str                 # Git Repository URL
+    title: Optional[str]          # 專案標題（選填）
+    description: Optional[str]    # 專案描述（選填）
+    project_type: str             # 專案類型：REFACTOR / SANDBOX
+    repo_url: Optional[str]       # Git Repository URL（SANDBOX 可為空）
     branch: str = "main"          # Git Branch
-    init_prompt: str              # Agent 初始提示
+    spec: str                     # 重構規格說明（原 init_prompt）
+    refactor_thread_id: Optional[str]  # 重構會話 ID（持久化用）
     status: ProjectStatus         # 專案狀態
     container_id: Optional[str]   # Docker 容器 ID
     owner_id: str                 # 擁有者用戶 ID
@@ -197,7 +201,7 @@ CREATED → PROVISIONING → READY → RUNNING → READY
 ```python
 class User(BaseModel):
     id: Optional[str]             # MongoDB _id
-    email: EmailStr               # 唯一，用於登入
+    email: EmailStr               # 唯一，用於識別/聯絡
     username: str                 # 用戶名稱
     password_hash: str            # bcrypt hash
     is_active: bool = True        # 帳號啟用狀態
@@ -243,7 +247,7 @@ class User(BaseModel):
 ```json
 // Request
 {
-  "email": "user@example.com",
+  "username": "testuser",
   "password": "securepassword"
 }
 
@@ -279,9 +283,10 @@ class User(BaseModel):
 ```json
 // Request
 {
+  "project_type": "REFACTOR",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "main",
-  "init_prompt": "請分析這個專案並提出重構建議"
+  "spec": "請分析這個專案並提出重構建議"
 }
 
 // Response (201 Created)
@@ -289,7 +294,7 @@ class User(BaseModel):
   "id": "507f1f77bcf86cd799439011",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "main",
-  "init_prompt": "請分析這個專案並提出重構建議",
+  "spec": "請分析這個專案並提出重構建議",
   "status": "CREATED",
   "container_id": null,
   "owner_id": "507f191e810c19729de860ea",
@@ -345,13 +350,13 @@ Query 參數:
 ```json
 // Request
 {
-  "init_prompt": "新的提示內容"
+  "spec": "新的提示內容"
 }
 
 // Response
 {
   "id": "507f1f77bcf86cd799439011",
-  "init_prompt": "新的提示內容",
+  "spec": "新的提示內容",
   ...
 }
 ```
@@ -946,13 +951,14 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### 健康檢查
 
-**端點**: `GET /health`
+**端點**: `GET /api/v1/health`
 
 ```json
 // Response
 {
-  "status": "healthy",
-  "timestamp": "2026-02-02T12:00:00Z"
+  "status": "ok",
+  "timestamp": "2026-02-02T12:00:00Z",
+  "database": "healthy"
 }
 ```
 

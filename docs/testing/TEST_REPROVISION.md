@@ -49,7 +49,7 @@ python3 cli.py
 # 1. 登入取得 token
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"testpass123"}'
+  -d '{"username":"testuser","password":"testpass123"}'
 
 # 儲存 token
 export TOKEN="your_access_token"
@@ -59,9 +59,10 @@ PROJECT_RESPONSE=$(curl -X POST http://localhost:8000/api/v1/projects \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
+    "project_type":"REFACTOR",
     "repo_url":"https://github.com/octocat/Hello-World.git",
     "branch":"main",
-    "init_prompt":"分析程式碼"
+    "spec":"分析程式碼"
   }')
 
 PROJECT_ID=$(echo $PROJECT_RESPONSE | jq -r '.id')
@@ -85,8 +86,8 @@ curl "http://localhost:8000/api/v1/projects/$PROJECT_ID" \
   -H "Authorization: Bearer $TOKEN" | jq '.status'
 # 應顯示: "STOPPED"
 
-# 5. 重新 Provision（測試新功能）
-curl -X POST "http://localhost:8000/api/v1/projects/$PROJECT_ID/provision" \
+# 5. Reprovision（測試新功能：刪除容器並重新 provision）
+curl -X POST "http://localhost:8000/api/v1/projects/$PROJECT_ID/reprovision" \
   -H "Authorization: Bearer $TOKEN"
 
 # 查詢狀態
