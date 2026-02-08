@@ -165,9 +165,13 @@ class ProjectStatus(str, Enum):
 
 class Project(BaseModel):
     id: str                       # MongoDB _id
-    repo_url: str                 # Git Repository URL
+    title: Optional[str]          # 專案標題（選填）
+    description: Optional[str]    # 專案描述（選填）
+    project_type: str             # 專案類型：REFACTOR / SANDBOX
+    repo_url: Optional[str]       # Git Repository URL（SANDBOX 可為空）
     branch: str = "main"          # Git Branch
-    init_prompt: str              # Agent 初始提示
+    spec: str                     # 重構規格說明（原 init_prompt）
+    refactor_thread_id: Optional[str]  # 重構會話 ID（持久化用）
     status: ProjectStatus         # 專案狀態
     container_id: Optional[str]   # Docker 容器 ID
     owner_id: str                 # 擁有者用戶 ID
@@ -197,7 +201,7 @@ CREATED → PROVISIONING → READY → RUNNING → READY
 ```python
 class User(BaseModel):
     id: Optional[str]             # MongoDB _id
-    email: EmailStr               # 唯一，用於登入
+    email: EmailStr               # 唯一，用於識別/聯絡
     username: str                 # 用戶名稱
     password_hash: str            # bcrypt hash
     is_active: bool = True        # 帳號啟用狀態
@@ -243,7 +247,7 @@ class User(BaseModel):
 ```json
 // Request
 {
-  "email": "user@example.com",
+  "username": "testuser",
   "password": "securepassword"
 }
 
@@ -279,9 +283,10 @@ class User(BaseModel):
 ```json
 // Request
 {
+  "project_type": "REFACTOR",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "main",
-  "init_prompt": "請分析這個專案並提出重構建議"
+  "spec": "請分析這個專案並提出重構建議"
 }
 
 // Response (201 Created)
@@ -289,7 +294,7 @@ class User(BaseModel):
   "id": "507f1f77bcf86cd799439011",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "main",
-  "init_prompt": "請分析這個專案並提出重構建議",
+  "spec": "請分析這個專案並提出重構建議",
   "status": "CREATED",
   "container_id": null,
   "owner_id": "507f191e810c19729de860ea",
@@ -345,13 +350,13 @@ Query 參數:
 ```json
 // Request
 {
-  "init_prompt": "新的提示內容"
+  "spec": "新的提示內容"
 }
 
 // Response
 {
   "id": "507f1f77bcf86cd799439011",
-  "init_prompt": "新的提示內容",
+  "spec": "新的提示內容",
   ...
 }
 ```
@@ -883,38 +888,39 @@ LOG_LEVEL=INFO
 ```
 
 **說明**:
-- LLM 相關配置 (如 `ANTHROPIC_API_KEY`, `LLM_PROVIDER`, `GCP_PROJECT_ID` 等) 由容器內的 AI Server 自行處理，不需要在後端 `.env` 中設定
+- `ANTHROPIC_API_KEY` 由 Backend 讀取後，會注入到每個 Project Container 中使用（未設定時，Project Container 無法使用 Anthropic/Claude）。
+- `GCP_PROJECT_ID` / `GOOGLE_APPLICATION_CREDENTIALS` 等 Vertex AI 相關設定也由 Backend 讀取，用於掛載/轉交 credentials 到 Project Container。
 
 ### Docker Compose 部署
 
 **檔案**:
-- 開發版：`devops/docker-compose.dev.yml`（本機 build + volume mount）
-- 正式版：`devops/docker-compose.prod.yml`（從 Artifact Registry 拉取映像）
+- 開發/測試：`devops/docker-compose.yml`（本機 build + volume mount）
+- 正式環境：`devops/docker-compose.prod.yml`（從 Artifact Registry 拉取映像）
 
-**啟動指令（開發版）**:
+**啟動指令（開發/測試）**:
 ```bash
 # 啟動所有服務
-docker-compose -f devops/docker-compose.dev.yml up -d
+docker compose -f devops/docker-compose.yml up -d --build
 
 # 查看日誌
-docker-compose -f devops/docker-compose.dev.yml logs -f api
+docker compose -f devops/docker-compose.yml logs -f api
 
 # 停止服務
-docker-compose -f devops/docker-compose.dev.yml down
+docker compose -f devops/docker-compose.yml down
 ```
 
-**啟動指令（正式版）**:
+**啟動指令（正式環境）**:
 ```bash
-# 需先設定環境變數（Artifact Registry 映像）
-export AR_API_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-api:latest
-export AR_FRONTEND_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-frontend:latest
-export AR_BASE_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-base:latest
+# 需先設定環境變數（用於組成 image name）
+export REGISTRY_HOST="us-central1-docker.pkg.dev"
+export GCP_PROJECT_ID="your-project-id"
+export GAR_REPOSITORY="images"
+export IMAGE_TAG="latest"
 
-# 可選：指定主機資料/工作區路徑
-export HOST_DATA_DIR=/opt/refactor/data
-export HOST_WORKSPACE_DIR=/opt/refactor/workspaces
+# (可選) host 端 workspace 目錄
+export WORKSPACE_HOST_DIR="/var/lib/refactor-workspaces"
 
-docker-compose -f devops/docker-compose.prod.yml up -d
+./scripts/deploy-prod.sh
 ```
 
 ### 本地開發
@@ -946,13 +952,14 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### 健康檢查
 
-**端點**: `GET /health`
+**端點**: `GET /api/v1/health`
 
 ```json
 // Response
 {
-  "status": "healthy",
-  "timestamp": "2026-02-02T12:00:00Z"
+  "status": "ok",
+  "timestamp": "2026-02-02T12:00:00Z",
+  "database": "healthy"
 }
 ```
 

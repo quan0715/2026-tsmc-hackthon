@@ -187,8 +187,9 @@ cd ~
 git clone https://github.com/YOUR_USERNAME/auto-refactor-agent.git
 cd auto-refactor-agent
 
-# 建立 .env.prod 檔案
-cat > .env.prod << 'EOF'
+# 建立 backend/.env 檔案（API 容器會讀取）
+mkdir -p backend
+cat > backend/.env << 'EOF'
 # MongoDB
 MONGODB_URL=mongodb://mongodb:27017
 MONGODB_DATABASE=refactor_agent
@@ -207,7 +208,8 @@ ANTHROPIC_API_KEY=YOUR_ANTHROPIC_API_KEY_HERE
 # Docker
 DOCKER_BASE_IMAGE=refactor-base:latest
 DOCKER_NETWORK=refactor-network
-DOCKER_VOLUME_PREFIX=/var/refactor-workspaces
+# 專案 workspace 在 API 容器內的根目錄（host 端目錄由 compose 的 WORKSPACE_HOST_DIR 控制）
+DOCKER_VOLUME_PREFIX=/tmp/refactor-workspaces
 
 # Container resources
 CONTAINER_CPU_LIMIT=2.0
@@ -222,10 +224,10 @@ LOG_LEVEL=INFO
 EOF
 
 # 設定權限
-chmod 600 .env.prod
+chmod 600 backend/.env
 ```
 
-⚠️ **重要**：請修改 `.env.prod` 中的以下變數：
+⚠️ **重要**：請修改 `backend/.env` 中的以下變數：
 - `JWT_SECRET_KEY` - 生產環境務必使用安全的隨機字串
 - `ANTHROPIC_API_KEY` - 填入你的 Anthropic API Key
 
@@ -238,17 +240,17 @@ docker network create refactor-network
 #### 4.6 測試部署
 
 ```bash
-# 手動拉取映像測試
-docker pull us-central1-docker.pkg.dev/$PROJECT_ID/images/refactor-base:latest
+# 設定部署必要環境變數（用於組成 image name）
+export REGISTRY_HOST="us-central1-docker.pkg.dev"
+export GCP_PROJECT_ID="$PROJECT_ID"
+export GAR_REPOSITORY="images"
+export IMAGE_TAG="latest"
 
-# 啟動服務
-docker-compose -f devops/docker-compose.prod.yml up -d
+# (可選) host 端 workspace 目錄
+export WORKSPACE_HOST_DIR="/var/lib/refactor-workspaces"
 
-# 檢查狀態
-docker-compose -f devops/docker-compose.prod.yml ps
-
-# 查看日誌
-docker-compose -f devops/docker-compose.prod.yml logs -f api
+# 一鍵拉取並啟動服務
+./scripts/deploy-prod.sh
 ```
 
 ---
@@ -333,7 +335,7 @@ EXTERNAL_IP=$(gcloud compute instances describe refactor-agent-prod \
 echo "Instance IP: $EXTERNAL_IP"
 
 # 測試 API health endpoint
-curl http://$EXTERNAL_IP:8000/health
+curl http://$EXTERNAL_IP:8000/api/v1/health
 
 # 測試 Frontend
 curl -I http://$EXTERNAL_IP:80
@@ -420,7 +422,7 @@ docker ps -a
 docker logs refactor-api --tail 50
 
 # 檢查網路連接
-docker exec refactor-api curl -f http://localhost:8000/health
+docker exec refactor-api curl -f http://localhost:8000/api/v1/health
 
 # 檢查防火牆
 sudo iptables -L -n
@@ -438,15 +440,15 @@ ValueError: PostgreSQL URL is required
 # SSH 到 GCE
 gcloud compute ssh refactor-agent-prod --zone=us-central1-a
 
-# 檢查 .env.prod
-cat ~/auto-refactor-agent/.env.prod | grep POSTGRES_URL
+# 檢查 backend/.env
+cat ~/auto-refactor-agent/backend/.env | grep POSTGRES_URL
 
 # 確保 PostgreSQL 容器正在運行
 docker ps | grep postgres
 
 # 重啟服務
 cd ~/auto-refactor-agent
-docker-compose -f devops/docker-compose.prod.yml restart api
+docker compose -f devops/docker-compose.prod.yml restart api
 ```
 
 ---
@@ -469,17 +471,16 @@ docker pull us-central1-docker.pkg.dev/$PROJECT_ID/images/refactor-base:$OLD_TAG
 docker pull us-central1-docker.pkg.dev/$PROJECT_ID/images/refactor-api:$OLD_TAG
 docker pull us-central1-docker.pkg.dev/$PROJECT_ID/images/refactor-frontend:$OLD_TAG
 
-# Tag 為 latest
-docker tag us-central1-docker.pkg.dev/$PROJECT_ID/images/refactor-base:$OLD_TAG refactor-base:latest
-docker tag us-central1-docker.pkg.dev/$PROJECT_ID/images/refactor-api:$OLD_TAG refactor-api:latest
-docker tag us-central1-docker.pkg.dev/$PROJECT_ID/images/refactor-frontend:$OLD_TAG refactor-frontend:latest
+# 使用舊 tag 重新啟動（確保 docker compose 變數對應）
+export REGISTRY_HOST="us-central1-docker.pkg.dev"
+export GCP_PROJECT_ID="$PROJECT_ID"
+export GAR_REPOSITORY="images"
+export IMAGE_TAG="$OLD_TAG"
 
-# 重啟服務
-docker-compose -f devops/docker-compose.prod.yml down
-docker-compose -f devops/docker-compose.prod.yml up -d
+./scripts/deploy-prod.sh
 
 # 驗證
-docker-compose -f devops/docker-compose.prod.yml ps
+docker compose -f devops/docker-compose.prod.yml ps
 ```
 
 ---

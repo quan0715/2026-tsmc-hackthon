@@ -23,6 +23,10 @@ BASE_IMAGE_TAG=${BASE_IMAGE_TAG:-$IMAGE_TAG}
 WORKSPACE_HOST_DIR=${WORKSPACE_HOST_DIR:-/var/lib/refactor-workspaces}
 COMPOSE_FILE="devops/docker-compose.prod.yml"
 
+# docker compose 需要讀取這些環境變數來組成 image name 與 volume path
+export IMAGE_TAG BASE_IMAGE_TAG WORKSPACE_HOST_DIR
+export REGISTRY_HOST GCP_PROJECT_ID GAR_REPOSITORY
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker not found. Please install Docker." >&2
   exit 1

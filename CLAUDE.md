@@ -37,7 +37,7 @@ AI 舊程式碼智能重構系統 - 一個前後端分離的大型專案，提�
 
 ### 資料模型設計
 
-- **Project** - 專案基本資訊 (repo_url, branch, init_prompt, status, container_id, owner_id)
+- **Project** - 專案基本資訊 (repo_url, branch, spec, status, container_id, owner_id)
 - **AgentRun** - Agent 執行記錄 (project_id, iteration_index, phase, status, artifacts_path)
 - **User** - 使用者帳號 (email, hashed_password, JWT 認證)
 
@@ -68,19 +68,19 @@ docker build -t refactor-base:latest -f devops/base-image/Dockerfile .
 docker run --rm refactor-base:latest ls -la /workspace/agent/
 
 # 啟動所有服務 (MongoDB + API + Frontend)
-docker-compose -f devops/docker-compose.yml up -d
+docker compose -f devops/docker-compose.yml up -d
 
 # 查看服務狀態
-docker-compose -f devops/docker-compose.yml ps
+docker compose -f devops/docker-compose.yml ps
 
 # 查看 API 日誌
-docker-compose -f devops/docker-compose.yml logs -f api
+docker compose -f devops/docker-compose.yml logs -f api
 
 # 停止服務
-docker-compose -f devops/docker-compose.yml down
+docker compose -f devops/docker-compose.yml down
 
 # 停止並清除資料
-docker-compose -f devops/docker-compose.yml down -v
+docker compose -f devops/docker-compose.yml down -v
 ```
 
 **API 層級控制**：

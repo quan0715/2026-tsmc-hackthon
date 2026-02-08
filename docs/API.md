@@ -4,7 +4,7 @@
 
 **Base URL**: `http://localhost:8000` (開發環境)
 **API Version**: v1
-**最後更新**: 2026-02-02
+**最後更新**: 2026-02-08
 
 ---
 
@@ -31,6 +31,11 @@
   - [GET /api/v1/projects/{id}/agent/runs](#get-apiv1projectsidagentruns)
   - [GET /api/v1/projects/{id}/agent/runs/{run_id}](#get-apiv1projectsidagentrunsrun_id)
   - [GET /api/v1/projects/{id}/agent/runs/{run_id}/stream](#get-apiv1projectsidagentrunsrun_idstream)
+- [Chat API](#chat-api)
+  - [POST /api/v1/projects/{id}/chat](#post-apiv1projectsidchat)
+  - [GET /api/v1/projects/{id}/chat/sessions](#get-apiv1projectsidchatsessions)
+  - [GET /api/v1/projects/{id}/chat/sessions/{thread_id}/history](#get-apiv1projectsidchatsessionsthread_idhistory)
+  - [GET /api/v1/projects/{id}/chat/{task_id}/stream](#get-apiv1projectsidchattask_idstream)
 
 ---
 
@@ -142,7 +147,7 @@ Authorization: Bearer <access_token>
 
 ```json
 {
-  "email": "user@example.com",
+  "username": "testuser",
   "password": "password123"
 }
 ```
@@ -151,7 +156,7 @@ Authorization: Bearer <access_token>
 
 | 欄位 | 類型 | 必填 | 說明 |
 |------|------|------|------|
-| email | string | ✅ | 用戶 Email |
+| username | string | ✅ | 用戶名稱 |
 | password | string | ✅ | 密碼 |
 
 #### Response (200 OK)
@@ -174,10 +179,10 @@ Authorization: Bearer <access_token>
 
 #### 錯誤回應
 
-**401 Unauthorized** - Email 或密碼錯誤
+**401 Unauthorized** - Username 或密碼錯誤
 ```json
 {
-  "detail": "Incorrect email or password"
+  "detail": "Incorrect username or password"
 }
 ```
 
@@ -228,9 +233,11 @@ Authorization: Bearer <access_token>
 
 ```json
 {
+  "title": "My Refactor Project",
+  "project_type": "REFACTOR",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "main",
-  "init_prompt": "請分析這個專案並提出重構建議"
+  "spec": "請先掃描專案並提出可量化的重構計劃"
 }
 ```
 
@@ -238,18 +245,25 @@ Authorization: Bearer <access_token>
 
 | 欄位 | 類型 | 必填 | 預設值 | 說明 |
 |------|------|------|--------|------|
-| repo_url | string | ✅ | - | Git Repository URL |
+| title | string | ❌ | - | 專案標題（未填可由後端推導）|
+| description | string | ❌ | - | 專案描述 |
+| project_type | string | ❌ | "REFACTOR" | 專案類型：REFACTOR / SANDBOX |
+| repo_url | string | 條件式 | - | Git Repository URL（REFACTOR 必填） |
 | branch | string | ❌ | "main" | Git 分支名稱 |
-| init_prompt | string | ✅ | - | Agent 初始提示（任務描述）|
+| spec | string | ❌ | "" | 重構規格說明（Agent 主要輸入）|
 
 #### Response (201 Created)
 
 ```json
 {
   "id": "507f1f77bcf86cd799439011",
+  "title": "My Refactor Project",
+  "description": null,
+  "project_type": "REFACTOR",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "main",
-  "init_prompt": "請分析這個專案並提出重構建議",
+  "spec": "請先掃描專案並提出可量化的重構計劃",
+  "refactor_thread_id": null,
   "status": "CREATED",
   "container_id": null,
   "created_at": "2026-02-02T12:00:00Z",
@@ -301,7 +315,7 @@ GET /api/v1/projects?skip=0&limit=10
       "id": "507f1f77bcf86cd799439011",
       "repo_url": "https://github.com/user/repo.git",
       "branch": "main",
-      "init_prompt": "重構建議",
+      "spec": "重構建議",
       "status": "READY",
       "container_id": "abc123def456",
       "created_at": "2026-02-02T12:00:00Z",
@@ -345,7 +359,7 @@ GET /api/v1/projects/507f1f77bcf86cd799439011?include_docker_status=true
   "id": "507f1f77bcf86cd799439011",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "main",
-  "init_prompt": "重構建議",
+  "spec": "重構建議",
   "status": "READY",
   "container_id": "abc123def456",
   "created_at": "2026-02-02T12:00:00Z",
@@ -409,7 +423,7 @@ GET /api/v1/projects/507f1f77bcf86cd799439011?include_docker_status=true
 ```json
 {
   "branch": "develop",
-  "init_prompt": "新的任務描述"
+  "spec": "新的任務描述"
 }
 ```
 
@@ -418,9 +432,11 @@ GET /api/v1/projects/507f1f77bcf86cd799439011?include_docker_status=true
 | 欄位 | 類型 | 限制 | 說明 |
 |------|------|------|------|
 | repo_url | string | ⚠️ Provision 後無法修改 | Git Repository URL |
+| title | string | - | 專案標題 |
+| description | string | - | 專案描述 |
 | branch | string | - | Git 分支名稱 |
-| init_prompt | string | - | Agent 初始提示 |
-| status | string | - | 專案狀態 |
+| spec | string | - | 重構規格說明 |
+| status | string | - | 專案狀態（通常由系統流程更新，不建議手動改） |
 
 #### Response (200 OK)
 
@@ -429,7 +445,7 @@ GET /api/v1/projects/507f1f77bcf86cd799439011?include_docker_status=true
   "id": "507f1f77bcf86cd799439011",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "develop",
-  "init_prompt": "新的任務描述",
+  "spec": "新的任務描述",
   "status": "CREATED",
   "container_id": null,
   "created_at": "2026-02-02T12:00:00Z",
@@ -647,7 +663,7 @@ data: keep-alive
   "id": "507f1f77bcf86cd799439011",
   "repo_url": "https://github.com/user/repo.git",
   "branch": "main",
-  "init_prompt": "重構建議",
+  "spec": "重構建議",
   "status": "STOPPED",
   "container_id": "abc123def456",
   "created_at": "2026-02-02T12:00:00Z",
@@ -941,6 +957,126 @@ data: {"status": "success", "message": "分析完成", "artifacts": ["plan.json"
 
 ---
 
+## Chat API
+
+聊天模式會呼叫 Project Container 內的 AI Server `/chat`，並以 `thread_id` 維持多輪對話上下文。
+
+### POST /api/v1/projects/{id}/chat
+
+發送聊天訊息，啟動聊天任務（背景執行）。
+
+**認證**: 🔒 需要 Bearer Token
+
+**前置條件**: 專案狀態必須為 `READY`
+
+#### Request Body
+
+```json
+{
+  "message": "Hello! Please list the files in /workspace",
+  "thread_id": null,
+  "verbose": true,
+  "model": null
+}
+```
+
+| 欄位 | 類型 | 必填 | 說明 |
+|------|------|------|------|
+| message | string | ✅ | 使用者訊息 |
+| thread_id | string | ❌ | 對話 ID（不提供則自動生成）|
+| verbose | boolean | ❌ | 是否輸出較多日誌（預設 true）|
+| model | string | ❌ | 模型 ID（選用）|
+
+#### Response (200 OK)
+
+```json
+{
+  "task_id": "task_abc123xyz",
+  "thread_id": "chat-507f1f77bcf86cd799439011-uuid",
+  "project_id": "507f1f77bcf86cd799439011",
+  "status": "RUNNING",
+  "message": "聊天任務已啟動，正在背景執行"
+}
+```
+
+#### 錯誤回應
+
+**400 Bad Request** - 專案狀態不正確
+```json
+{
+  "detail": "專案狀態必須為 READY，目前為 CREATED"
+}
+```
+
+### GET /api/v1/projects/{id}/chat/sessions
+
+列出專案的聊天會話（依最後訊息時間排序）。
+
+**認證**: 🔒 需要 Bearer Token
+
+#### Response (200 OK)
+
+```json
+{
+  "total": 1,
+  "sessions": [
+    {
+      "thread_id": "chat-507f1f77bcf86cd799439011-uuid",
+      "project_id": "507f1f77bcf86cd799439011",
+      "title": "Hello! Please list the files in /workspace",
+      "created_at": "2026-02-02T12:00:00Z",
+      "last_message_at": "2026-02-02T12:01:00Z"
+    }
+  ]
+}
+```
+
+### GET /api/v1/projects/{id}/chat/sessions/{thread_id}/history
+
+取得聊天歷史（轉發 Project Container AI Server）。
+
+**認證**: 🔒 需要 Bearer Token
+
+#### Response (200 OK)
+
+```json
+{
+  "thread_id": "chat-507f1f77bcf86cd799439011-uuid",
+  "messages": [
+    {
+      "id": "msg_1",
+      "role": "user",
+      "content": "Hello",
+      "timestamp": "2026-02-02T12:00:00Z"
+    }
+  ]
+}
+```
+
+### GET /api/v1/projects/{id}/chat/{task_id}/stream
+
+SSE 串流聊天回應（直接轉發容器的 task stream）。
+
+**認證**: 🔒 需要 Bearer Token
+
+#### Request
+
+```http
+GET /api/v1/projects/507f1f77bcf86cd799439011/chat/task_abc123xyz/stream
+Accept: text/event-stream
+```
+
+#### Response (200 OK)
+
+```
+Content-Type: text/event-stream
+
+event: text_delta
+data: {"delta": "Hello"}
+```
+
+---
+
 ## 附錄
 
 ### 範例：完整流程
@@ -959,7 +1095,7 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
 TOKEN=$(curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "dev@example.com",
+    "username": "developer",
     "password": "secure123"
   }' | jq -r '.access_token')
 
@@ -968,9 +1104,10 @@ PROJECT_ID=$(curl -X POST http://localhost:8000/api/v1/projects \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
+    "project_type": "REFACTOR",
     "repo_url": "https://github.com/user/legacy-code.git",
     "branch": "main",
-    "init_prompt": "分析專案並提出重構建議"
+    "spec": "分析專案並提出重構建議"
   }' | jq -r '.id')
 
 # 4. Provision 專案
@@ -1011,9 +1148,10 @@ const api = axios.create({
 
 // 建立專案
 const { data: project } = await api.post('/api/v1/projects', {
+  project_type: 'REFACTOR',
   repo_url: 'https://github.com/user/repo.git',
   branch: 'main',
-  init_prompt: '重構建議'
+  spec: '重構建議'
 });
 
 // Provision 專案
