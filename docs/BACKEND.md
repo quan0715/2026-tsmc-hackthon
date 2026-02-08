@@ -888,38 +888,39 @@ LOG_LEVEL=INFO
 ```
 
 **說明**:
-- LLM 相關配置 (如 `ANTHROPIC_API_KEY`, `LLM_PROVIDER`, `GCP_PROJECT_ID` 等) 由容器內的 AI Server 自行處理，不需要在後端 `.env` 中設定
+- `ANTHROPIC_API_KEY` 由 Backend 讀取後，會注入到每個 Project Container 中使用（未設定時，Project Container 無法使用 Anthropic/Claude）。
+- `GCP_PROJECT_ID` / `GOOGLE_APPLICATION_CREDENTIALS` 等 Vertex AI 相關設定也由 Backend 讀取，用於掛載/轉交 credentials 到 Project Container。
 
 ### Docker Compose 部署
 
 **檔案**:
-- 開發版：`devops/docker-compose.dev.yml`（本機 build + volume mount）
-- 正式版：`devops/docker-compose.prod.yml`（從 Artifact Registry 拉取映像）
+- 開發/測試：`devops/docker-compose.yml`（本機 build + volume mount）
+- 正式環境：`devops/docker-compose.prod.yml`（從 Artifact Registry 拉取映像）
 
-**啟動指令（開發版）**:
+**啟動指令（開發/測試）**:
 ```bash
 # 啟動所有服務
-docker-compose -f devops/docker-compose.dev.yml up -d
+docker compose -f devops/docker-compose.yml up -d --build
 
 # 查看日誌
-docker-compose -f devops/docker-compose.dev.yml logs -f api
+docker compose -f devops/docker-compose.yml logs -f api
 
 # 停止服務
-docker-compose -f devops/docker-compose.dev.yml down
+docker compose -f devops/docker-compose.yml down
 ```
 
-**啟動指令（正式版）**:
+**啟動指令（正式環境）**:
 ```bash
-# 需先設定環境變數（Artifact Registry 映像）
-export AR_API_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-api:latest
-export AR_FRONTEND_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-frontend:latest
-export AR_BASE_IMAGE=us-central1-docker.pkg.dev/PROJECT/REPO/refactor-base:latest
+# 需先設定環境變數（用於組成 image name）
+export REGISTRY_HOST="us-central1-docker.pkg.dev"
+export GCP_PROJECT_ID="your-project-id"
+export GAR_REPOSITORY="images"
+export IMAGE_TAG="latest"
 
-# 可選：指定主機資料/工作區路徑
-export HOST_DATA_DIR=/opt/refactor/data
-export HOST_WORKSPACE_DIR=/opt/refactor/workspaces
+# (可選) host 端 workspace 目錄
+export WORKSPACE_HOST_DIR="/var/lib/refactor-workspaces"
 
-docker-compose -f devops/docker-compose.prod.yml up -d
+./scripts/deploy-prod.sh
 ```
 
 ### 本地開發

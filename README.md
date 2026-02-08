@@ -215,7 +215,7 @@ docker images | grep refactor-base
 
 1. 檢查容器內 AI Server 的 LLM API Key 設定
 2. 查看容器日誌：`docker logs refactor-project-{project_id}`
-3. 檢查 API 日誌：`docker-compose -f devops/docker-compose.yml logs -f api`
+3. 檢查 API 日誌：`docker compose -f devops/docker-compose.yml logs -f api`
 
 ### 如何清理測試資料？
 

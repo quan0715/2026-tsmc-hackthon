@@ -57,7 +57,7 @@ PostgreSQL Database (langgraph schema)
 
 ```bash
 # 1. 確保 PostgreSQL 正在運行
-docker-compose -f devops/docker-compose.yml up -d postgres
+docker compose -f devops/docker-compose.yml up -d postgres
 
 # 2. 設定環境變數
 export POSTGRES_URL="postgresql://langgraph:langgraph_secret@localhost:5432/langgraph"
@@ -92,7 +92,7 @@ open htmlcov/index.html
 
 ```bash
 # 啟動 PostgreSQL
-docker-compose -f devops/docker-compose.yml up -d postgres
+docker compose -f devops/docker-compose.yml up -d postgres
 
 # 等待服務就緒
 sleep 5
@@ -176,7 +176,7 @@ curl -X POST http://localhost:8000/chat \
 #### 3.2 重啟容器
 
 ```bash
-docker-compose -f devops/docker-compose.yml restart api
+docker compose -f devops/docker-compose.yml restart api
 ```
 
 #### 3.3 發送第二條訊息（應記得之前的對話）

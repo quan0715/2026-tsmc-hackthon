@@ -169,7 +169,7 @@ Actions > CI/CD Pipeline > Run workflow
 
 ```bash
 # 啟動服務
-docker-compose -f devops/docker-compose.yml up -d postgres mongodb
+docker compose -f devops/docker-compose.yml up -d postgres mongodb
 
 # 設定環境變數
 export MONGODB_URL="mongodb://localhost:27017"
