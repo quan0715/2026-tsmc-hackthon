@@ -514,8 +514,8 @@ export function ChatPanel({
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Messages */}
-      <ScrollArea className="flex-1">
-        <div className="p-3 space-y-3">
+      <ScrollArea className="flex-1" scrollbar="both">
+        <div className="px-4 py-3 space-y-3">
           {loadingHistory && (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Loader2 className="w-3 h-3 animate-spin" />
