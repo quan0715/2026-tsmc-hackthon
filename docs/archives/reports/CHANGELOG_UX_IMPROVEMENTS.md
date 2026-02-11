@@ -34,12 +34,12 @@
    - 重連狀態提示
 
 ### Documentation
-5. **`docs/UX_IMPROVEMENTS.md`**
+5. **`docs/archives/notes/UX_IMPROVEMENTS.md`**
    - 詳細的功能說明文件
    - 使用範例和技術細節
    - 未來改進方向
 
-6. **`docs/TESTING_UX_IMPROVEMENTS.md`**
+6. **`docs/archives/notes/TESTING_UX_IMPROVEMENTS.md`**
    - 完整的測試指南
    - 10 個測試案例
    - 測試報告模板

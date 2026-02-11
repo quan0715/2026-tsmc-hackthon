@@ -169,7 +169,7 @@ Actions > CI/CD Pipeline > Run workflow
 
 ```bash
 # 啟動服務
-docker-compose -f devops/docker-compose.yml up -d postgres mongodb
+docker compose -f devops/docker-compose.yml up -d postgres mongodb
 
 # 設定環境變數
 export MONGODB_URL="mongodb://localhost:27017"
@@ -312,9 +312,9 @@ gh pr create --base main
 - [Docker Compose 配置](../../devops/docker-compose.yml)
 - [Backend 測試指南](../../backend/tests/QUICK_START.md)
 - [Frontend 測試配置](../../frontend/vitest.config.ts)
-- [環境變數配置](../../ENV_UPDATE_SUMMARY.md)
+- [環境變數配置](../../docs/CONFIGURATION.md)
 
 ---
 
-**最後更新**: 2026-02-06
+**最後更新**: 2026-02-08
 **維護者**: Development Team

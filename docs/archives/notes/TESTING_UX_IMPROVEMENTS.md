@@ -265,7 +265,7 @@ setTimeout(() => toast.error('通知 3'), 1000)
 ### Q2: 重連失敗
 **檢查**:
 - 容器是否正在運行: `docker ps`
-- Backend API 是否正常: `curl http://localhost:8000/health`
+- Backend API 是否正常: `curl http://localhost:8000/api/v1/health`
 - 瀏覽器 Network 分頁查看 SSE 連線狀態
 
 ### Q3: 日誌不更新

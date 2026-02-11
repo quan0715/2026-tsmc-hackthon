@@ -10,7 +10,7 @@ AI Refactoring. Measured. Continuous.
 
 - Docker & Docker Compose
 - Git
-- (開發環境) Python 3.11+, Node.js 18+
+- (開發環境) Python 3.11+, Node.js 20+
 
 ### 環境設定
 
@@ -25,10 +25,11 @@ cp .env.example .env
 必要配置項：
 - `JWT_SECRET_KEY` - JWT 簽名金鑰（生產環境務必更換）
 - `MONGODB_URL` - MongoDB 連接字串
+- `POSTGRES_URL` - PostgreSQL 連接字串（必填，Agent 會話持久化）
 - `DOCKER_BASE_IMAGE` - Base Docker Image 名稱
 - `DOCKER_NETWORK` - Docker 網路名稱
 
-**注意**: LLM API Key（如 `ANTHROPIC_API_KEY`）由容器內的 AI Server 自行管理，不需要在後端 `.env` 中設定
+**注意**: `ANTHROPIC_API_KEY` 會由後端讀取後注入到每個專案的 Project Container 中使用；未設定時，Project Container 將無法使用 Anthropic/Claude。
 
 2. **建立 Base Image**
 
@@ -47,16 +48,16 @@ Dockerfile 位置：
 
 ```bash
 # 啟動所有服務（PostgreSQL + MongoDB + Backend API + Frontend）
-docker-compose -f devops/docker-compose.yml up -d
+docker compose -f devops/docker-compose.yml up -d --build
 
 # 查看服務狀態
-docker-compose -f devops/docker-compose.yml ps
+docker compose -f devops/docker-compose.yml ps
 
 # 查看日誌
-docker-compose -f devops/docker-compose.yml logs -f api
+docker compose -f devops/docker-compose.yml logs -f api
 
 # 停止服務
-docker-compose -f devops/docker-compose.yml down
+docker compose -f devops/docker-compose.yml down
 ```
 
 **GCE 單機（正式環境）**
@@ -73,8 +74,8 @@ docker-compose -f devops/docker-compose.yml down
 **本地開發模式**
 
 ```bash
-# 1. 啟動 MongoDB
-docker run -d --name mongodb -p 27017:27017 mongo:7
+# 1. 啟動 PostgreSQL + MongoDB（推薦直接用 compose）
+docker compose -f devops/docker-compose.yml up -d postgres mongodb
 
 # 2. 啟動 Backend
 cd backend
@@ -99,10 +100,10 @@ curl -X POST http://localhost:8000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"user@example.com","username":"testuser","password":"password123"}'
 
-# 登入
+# 登入（使用 username）
 curl -X POST http://localhost:8000/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"password123"}'
+  -d '{"username":"testuser","password":"password123"}'
 ```
 
 ### 2. 建立專案
@@ -112,9 +113,10 @@ curl -X POST http://localhost:8000/api/v1/projects \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "repo_url": "https://github.com/yourusername/your-repo.git",
+    "project_type": "REFACTOR",
+    "repo_url": "https://github.com/your-org/your-repo.git",
     "branch": "main",
-    "init_prompt": "分析此專案並生成重構計劃"
+    "spec": "分析此專案並生成可量化的重構計劃"
   }'
 ```
 
@@ -144,12 +146,14 @@ curl -N http://localhost:8000/api/v1/projects/{project_id}/agent/runs/{run_id}/s
 ## 測試
 
 ```bash
-# 執行完整 E2E 測試
-./test_cloud_run_e2e_v2.sh
+# Backend
+cd backend
+python -m pytest tests/ -v
 
-# 測試 base image 建置
-export ANTHROPIC_API_KEY=your-api-key
-./test_base_image.sh
+# Frontend
+cd frontend
+npm ci
+npm run test -- --run
 ```
 
 ## 系統架構
@@ -191,6 +195,9 @@ export ANTHROPIC_API_KEY=your-api-key
 
 - **[docs/API.md](./docs/API.md)** - REST API 完整規格
 - **[docs/BACKEND.md](./docs/BACKEND.md)** - 後端技術文件
+- **[docs/GETTING_STARTED.md](./docs/GETTING_STARTED.md)** - 啟動與開發入門
+- **[docs/USAGE.md](./docs/USAGE.md)** - 使用流程（UI/API）
+- **[docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md)** - 部署說明
 - **[docs/guides/](./docs/guides/)** - 使用指南
 - **[docs/testing/](./docs/testing/)** - 測試文件
 - **[CLAUDE.md](./CLAUDE.md)** - Claude Code 專案指引
@@ -208,13 +215,13 @@ docker images | grep refactor-base
 
 1. 檢查容器內 AI Server 的 LLM API Key 設定
 2. 查看容器日誌：`docker logs refactor-project-{project_id}`
-3. 檢查 API 日誌：`docker-compose -f devops/docker-compose.yml logs -f api`
+3. 檢查 API 日誌：`docker compose -f devops/docker-compose.yml logs -f api`
 
 ### 如何清理測試資料？
 
 ```bash
 # 停止並移除所有容器和資料
-docker-compose -f devops/docker-compose.yml down -v
+docker compose -f devops/docker-compose.yml down -v
 
 # 清理專案容器
 docker ps -a | grep refactor-project | awk '{print $1}' | xargs docker rm -f
