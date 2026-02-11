@@ -6,6 +6,8 @@ from .python_parser import PythonParser
 from .javascript_parser import JavaScriptParser
 from .java_parser import JavaParser
 from .go_parser import GoParser
+from .ruby_parser import RubyParser
+from .c_parser import CParser
 
 __all__ = [
     'BaseParser',
@@ -15,4 +17,6 @@ __all__ = [
     'JavaScriptParser',
     'JavaParser',
     'GoParser',
+    'RubyParser',
+    'CParser',
 ]

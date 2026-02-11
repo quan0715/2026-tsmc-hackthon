@@ -160,12 +160,53 @@ class ContainerService:
             # 傳遞 ANTHROPIC_API_KEY（如果有設定）
             if hasattr(settings, 'anthropic_api_key') and settings.anthropic_api_key:
                 env_vars.extend(["-e", f"ANTHROPIC_API_KEY={settings.anthropic_api_key}"])
+            else:
+                logger.warning(
+                    "⚠️ ANTHROPIC_API_KEY not configured. "
+                    "Anthropic models will NOT be available in project containers. "
+                    "Please configure ANTHROPIC_API_KEY in GitHub Secrets or backend/.env"
+                )
 
-            # 傳遞 POSTGRES_URL（用於 LangGraph 持久化）
-            postgres_url = os.environ.get("POSTGRES_URL")
-            if postgres_url:
-                env_vars.extend(["-e", f"POSTGRES_URL={postgres_url}"])
-                logger.info(f"容器將使用 PostgreSQL 持久化")
+            # 傳遞 POSTGRES_URL（用於 LangGraph 持久化 - 必填）
+            if not settings.postgres_url:
+                raise Exception(
+                    "POSTGRES_URL is required but not configured. "
+                    "Please set POSTGRES_URL in .env file."
+                )
+            env_vars.extend(["-e", f"POSTGRES_URL={settings.postgres_url}"])
+            logger.info(f"容器將使用 PostgreSQL 持久化: {settings.postgres_url}")
+
+            # 傳遞 GCP Project ID（用於 Vertex AI 模型）
+            if settings.gcp_project_id:
+                env_vars.extend(["-e", f"GCP_PROJECT_ID={settings.gcp_project_id}"])
+                logger.info(f"容器將使用 GCP Project: {settings.gcp_project_id}")
+
+            # 掛載 GCP credentials
+            # 1) 若有 GOOGLE_APPLICATION_CREDENTIALS，沿用指定路徑
+            # 2) 否則嘗試使用 ADC（API 容器內 /root/.config/gcloud/application_default_credentials.json）
+            if settings.google_application_credentials:
+                src_path = settings.google_application_credentials
+                if os.path.exists(src_path):
+                    import shutil
+                    host_creds_path = f"{settings.docker_volume_prefix}/gcp-credentials.json"
+                    os.makedirs(settings.docker_volume_prefix, exist_ok=True)
+                    shutil.copy2(src_path, host_creds_path)
+                    container_creds_path = "/workspace/credentials/gcp-credentials.json"
+                    volume_args.extend(["-v", f"{host_creds_path}:{container_creds_path}:ro"])
+                    env_vars.extend(["-e", f"GOOGLE_APPLICATION_CREDENTIALS={container_creds_path}"])
+                    logger.info("容器將掛載 GCP credentials (explicit)")
+                else:
+                    logger.warning(f"GCP credentials 檔案不存在: {src_path}")
+            else:
+                adc_path = "/root/.config/gcloud/application_default_credentials.json"
+                if os.path.exists(adc_path):
+                    import shutil
+                    host_creds_path = f"{settings.docker_volume_prefix}/adc-credentials.json"
+                    os.makedirs(settings.docker_volume_prefix, exist_ok=True)
+                    shutil.copy2(adc_path, host_creds_path)
+                    container_creds_path = "/root/.config/gcloud/application_default_credentials.json"
+                    volume_args.extend(["-v", f"{host_creds_path}:{container_creds_path}:ro"])
+                    logger.info("容器將使用 ADC credentials")
 
             # 建立容器
             cmd = [
@@ -584,12 +625,12 @@ class ContainerService:
         max_size: int = 1024 * 1024  # 1MB 限制
     ) -> Dict[str, Any]:
         """讀取容器中的檔案內容
-        
+
         Args:
             container_id: 容器 ID
             file_path: 檔案路徑（相對於 /workspace 或絕對路徑）
             max_size: 最大讀取大小（bytes）
-        
+
         Returns:
             包含 path, content, size 的字典
         """
@@ -606,16 +647,16 @@ class ContainerService:
                 text=True,
                 timeout=10
             )
-            
+
             file_size = int(size_result.stdout.strip() or 0)
-            
+
             if file_size == 0:
                 # 檔案不存在或為空
                 raise FileNotFoundError(f"檔案不存在或為空: {full_path}")
-            
+
             if file_size > max_size:
                 raise ValueError(f"檔案過大: {file_size} bytes (最大 {max_size} bytes)")
-            
+
             # 讀取檔案內容
             read_cmd = f"cat {shlex.quote(full_path)}"
             result = subprocess.run(
@@ -624,16 +665,16 @@ class ContainerService:
                 text=True,
                 timeout=30
             )
-            
+
             if result.returncode != 0:
                 raise FileNotFoundError(f"無法讀取檔案: {result.stderr}")
-            
+
             return {
                 "path": file_path,
                 "content": result.stdout,
                 "size": file_size
             }
-            
+
         except subprocess.TimeoutExpired:
             logger.error(f"讀取檔案超時: {full_path}")
             raise Exception("讀取檔案超時")
@@ -641,4 +682,58 @@ class ContainerService:
             raise
         except Exception as e:
             logger.error(f"讀取檔案失敗: {e}")
+            raise
+
+    def export_workspace(
+        self,
+        container_id: str,
+        exclude_patterns: list = None
+    ) -> bytes:
+        """匯出容器中的 workspace 目錄為 tar.gz 檔案
+
+        Args:
+            container_id: 容器 ID
+            exclude_patterns: 要排除的路徑模式列表（相對於 /workspace）
+
+        Returns:
+            tar.gz 檔案的二進位內容
+        """
+        if exclude_patterns is None:
+            exclude_patterns = ["agent"]  # 排除 agent 目錄
+
+        try:
+            # 建構 tar 排除參數
+            exclude_args = " ".join([f"--exclude='{p}'" for p in exclude_patterns])
+
+            # 使用 tar 打包 workspace 目錄，排除指定目錄，並輸出到 stdout
+            # -C /workspace: 切換到 /workspace 目錄
+            # -czf -: 建立 gzip 壓縮的 tar 檔案並輸出到 stdout
+            # .: 打包當前目錄下的所有內容
+            tar_cmd = f"tar -C /workspace {exclude_args} -czf - ."
+
+            logger.info(f"匯出 workspace: container_id={container_id}, exclude={exclude_patterns}")
+
+            result = subprocess.run(
+                ["docker", "exec", container_id, "sh", "-c", tar_cmd],
+                capture_output=True,
+                timeout=300  # 5 分鐘超時
+            )
+
+            if result.returncode != 0:
+                error_msg = result.stderr.decode('utf-8') if result.stderr else "未知錯誤"
+                logger.error(f"匯出 workspace 失敗: {error_msg}")
+                raise Exception(f"匯出失敗: {error_msg}")
+
+            # 檢查是否有輸出
+            if not result.stdout:
+                raise Exception("匯出檔案為空")
+
+            logger.info(f"成功匯出 workspace: size={len(result.stdout)} bytes")
+            return result.stdout
+
+        except subprocess.TimeoutExpired:
+            logger.error("匯出 workspace 超時")
+            raise Exception("匯出超時（5 分鐘）")
+        except Exception as e:
+            logger.error(f"匯出 workspace 失敗: {e}")
             raise

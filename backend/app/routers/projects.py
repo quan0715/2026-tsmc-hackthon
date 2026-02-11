@@ -2,6 +2,7 @@
 import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import Response
 from pymongo.asynchronous.database import AsyncDatabase
 
 from ..database.mongodb import get_database
@@ -337,4 +338,45 @@ async def get_file_content(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"讀取檔案失敗: {str(e)}",
+        )
+
+
+@router.get("/{project_id}/export")
+async def export_workspace(
+    project_id: str,
+    service: ProjectService = Depends(get_project_service),
+    project = Depends(verify_project_access),
+):
+    """匯出專案 workspace 內容為 tar.gz 檔案（需要認證）"""
+    if not project.container_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="專案尚未 provision，請先執行 provision",
+        )
+
+    try:
+        container_service = ContainerService()
+        # 匯出 workspace，排除 agent 目錄
+        tar_content = container_service.export_workspace(
+            project.container_id,
+            exclude_patterns=["agent"]
+        )
+
+        # 生成檔案名稱
+        project_name = project.title or project.repo_url.split('/').pop().replace('.git', '') if project.repo_url else f"project-{project_id}"
+        filename = f"{project_name}-workspace.tar.gz"
+
+        # 回傳 tar.gz 檔案
+        return Response(
+            content=tar_content,
+            media_type="application/gzip",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    except Exception as e:
+        logger.error(f"匯出 workspace 失敗: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"匯出失敗: {str(e)}",
         )

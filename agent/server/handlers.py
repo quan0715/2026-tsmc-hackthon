@@ -7,7 +7,7 @@ from datetime import datetime
 
 from agent.server.schemas import TaskStatus
 from agent.server import state
-from agent.models import AnthropicModelProvider
+from agent.model_factory import ModelFactory
 from agent.deep_agent import RefactorAgent
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ def log_task(task_id: str, message: str):
     logger.info(f"[{task_id}] {message}")
 
 
-def execute_agent(task_id: str, spec: str, thread_id: str, verbose: bool):
+def execute_agent(task_id: str, spec: str, thread_id: str, verbose: bool, model: str = None):
     """背景執行 Agent（在 BackgroundTasks 中執行）
 
     支援會話持久化：
@@ -65,10 +65,10 @@ def execute_agent(task_id: str, spec: str, thread_id: str, verbose: bool):
 
         # 獲取或建立 Agent（複用同一 thread 的 agent）
         if thread_id not in state.refactor_agents:
-            print(f"🔧 [DEBUG] Task {task_id}: 初始化 LLM", flush=True)
-            log_task(task_id, "🔧 初始化 LLM...")
-            provider = AnthropicModelProvider()
-            model = provider.get_model()
+            print(f"🔧 [DEBUG] Task {task_id}: 初始化 LLM (model={model or 'default'})", flush=True)
+            log_task(task_id, f"🔧 初始化 LLM (model={model or 'default'})...")
+            factory = ModelFactory()
+            llm_model = factory.create_model(model)
             print(f"✅ [DEBUG] Task {task_id}: LLM 初始化完成", flush=True)
             log_task(task_id, "✅ LLM 初始化完成")
 
@@ -89,7 +89,7 @@ def execute_agent(task_id: str, spec: str, thread_id: str, verbose: bool):
                 return state.stop_flags.get(task_id, False)
 
             state.refactor_agents[thread_id] = RefactorAgent(
-                model=model,
+                model=llm_model,
                 verbose=verbose,
                 postgres_url=postgres_url,
                 stop_check_callback=stop_check
@@ -159,7 +159,7 @@ def execute_agent(task_id: str, spec: str, thread_id: str, verbose: bool):
             del state.stop_flags[task_id]
 
 
-def execute_chat(task_id: str, thread_id: str, message: str, verbose: bool):
+def execute_chat(task_id: str, thread_id: str, message: str, verbose: bool, model: str = None):
     """背景執行聊天任務（支援多輪對話）"""
     try:
         # 初始化日誌和停止標誌
@@ -197,9 +197,9 @@ def execute_chat(task_id: str, thread_id: str, message: str, verbose: bool):
 
         # 獲取或建立 Agent
         if thread_id not in state.chat_agents:
-            log_task(task_id, "🔧 初始化 LLM...")
-            provider = AnthropicModelProvider()
-            model = provider.get_model()
+            log_task(task_id, f"🔧 初始化 LLM (model={model or 'default'})...")
+            factory = ModelFactory()
+            llm_model = factory.create_model(model)
             log_task(task_id, "✅ LLM 初始化完成")
 
             log_task(task_id, "🤖 建立 ChatAgent...")
@@ -208,7 +208,7 @@ def execute_chat(task_id: str, thread_id: str, message: str, verbose: bool):
                 return state.stop_flags.get(task_id, False)
 
             state.chat_agents[thread_id] = RefactorAgent(
-                model=model,
+                model=llm_model,
                 verbose=verbose,
                 postgres_url=postgres_url,
                 stop_check_callback=chat_stop_check

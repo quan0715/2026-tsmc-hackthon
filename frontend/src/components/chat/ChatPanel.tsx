@@ -11,12 +11,19 @@ import {
   streamChatResponseAPI,
   stopChatAPI,
 } from "@/services/chat.service";
+import { stopAgentRunAPI } from "@/services/agent.service";
 import type { ChatMessage, ChatStreamEvent } from "@/types/chat.types";
+import type { AgentRunDetail } from "@/types/agent.types";
 import type { Task } from "@/components/agent/TaskList";
 import { Bot, User, Wrench, Square, Loader2, ArrowUp } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { apiErrorMessage } from "@/utils/apiError";
+import { useAgentRunStream } from "@/hooks/useAgentRunStream";
+import { ModelSelector } from "@/components/common/ModelSelector";
+import { useToast } from "@/hooks/useToast";
+import { Toast } from "@/components/ui/toast";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Props {
   projectId: string;
@@ -28,6 +35,9 @@ interface Props {
   onTasksUpdate?: (tasks: Task[]) => void;
   onStreamingChange?: (isStreaming: boolean) => void;
   loadingHistory?: boolean;
+  // Agent Run 相關
+  currentRun?: AgentRunDetail | null;
+  onReconnect?: () => void;
 }
 
 export function ChatPanel({
@@ -40,8 +50,11 @@ export function ChatPanel({
   onTasksUpdate,
   onStreamingChange,
   loadingHistory = false,
+  currentRun,
+  onReconnect,
 }: Props) {
   const [input, setInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamHint, setStreamHint] = useState<string | null>(null);
   const [streamStart, setStreamStart] = useState<number | null>(null);
@@ -55,18 +68,109 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const cancelStreamRef = useRef<(() => void) | null>(null);
+  const warningShownRef = useRef<{ [key: number]: boolean }>({});
+
+  // Toast for warnings
+  const toast = useToast();
+
+  // Agent Run 串流整合
+  const isAgentRunning = currentRun?.status === 'RUNNING';
+  const { isStreaming: isAgentStreaming, isReconnecting } = useAgentRunStream({
+    projectId,
+    runId: currentRun?.id || null,
+    runCreatedAt: currentRun?.created_at || null,
+    isRunning: isAgentRunning,
+    onLogEvent: (event) => {
+      // 將 Agent Run 日誌轉換為 Chat 訊息格式
+      if (event.type === 'ai_content' && event.content?.text) {
+        const messageId = `agent-${Date.now()}`
+        const agentMessage: ChatMessage = {
+          id: messageId,
+          role: 'assistant',
+          content: event.content.text,
+          timestamp: event.timestamp || new Date().toISOString(),
+        }
+        onMessagesChange((prev) => [...prev, agentMessage])
+      } else if (event.type === 'tool_call' || event.type === 'tool_calls') {
+        const toolCalls = event.content?.tool_calls || [event.content]
+        const toolMessages: ChatMessage[] = toolCalls.map((tool: any) => ({
+          id: `tool-${Date.now()}-${tool.id || Math.random()}`,
+          role: 'tool' as const,
+          content: '',
+          timestamp: new Date().toISOString(),
+          toolName: tool.name || tool.tool_name,
+          toolCallId: tool.id,
+          toolInput: tool.args || tool.arguments,
+        }))
+        onMessagesChange((prev) => [...prev, ...toolMessages])
+      } else if (event.type === 'tool_result' && event.content) {
+        // 更新最後一個 tool 訊息的輸出
+        onMessagesChange((prev) => {
+          const lastToolIdx = prev.findLastIndex((m) => m.role === 'tool' && !m.toolOutput)
+          if (lastToolIdx >= 0) {
+            const newMessages = [...prev]
+            newMessages[lastToolIdx] = {
+              ...newMessages[lastToolIdx],
+              toolOutput: typeof event.content.output === 'string'
+                ? event.content.output
+                : JSON.stringify(event.content.output, null, 2),
+            }
+            return newMessages
+          }
+          return prev
+        })
+      } else if (event.type === 'task_list' && event.content?.tasks) {
+        onTasksUpdate?.(event.content.tasks)
+      }
+    },
+    onError: (error) => {
+      console.error('Agent Run stream error:', error)
+    },
+    onReconnect,
+  })
+
+  // 合併聊天和 Agent Run 的串流狀態
+  const isAnyStreaming = isStreaming || isAgentStreaming
 
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // 監控會話長度，顯示警告
   useEffect(() => {
-    onStreamingChange?.(isStreaming);
-  }, [isStreaming, onStreamingChange]);
+    const count = messages.length;
+
+    // 第一次警告: 50 條訊息
+    if (count >= 50 && count < 100 && !warningShownRef.current[50]) {
+      warningShownRef.current[50] = true;
+      toast.info(
+        "💡 對話已累積 50+ 條訊息，建議開啟新會話以獲得更好的效能",
+        8000
+      );
+    }
+
+    // 第二次警告: 100 條訊息（更嚴重）
+    if (count >= 100 && !warningShownRef.current[100]) {
+      warningShownRef.current[100] = true;
+      toast.info(
+        "⚠️ 對話已累積 100+ 條訊息，強烈建議開啟新會話避免效能問題",
+        10000
+      );
+    }
+  }, [messages.length, toast]);
+
+  // 當 threadId 改變時，重置警告狀態
+  useEffect(() => {
+    warningShownRef.current = {};
+  }, [threadId]);
 
   useEffect(() => {
-    if (!isStreaming) {
+    onStreamingChange?.(isAnyStreaming);
+  }, [isAnyStreaming, onStreamingChange]);
+
+  useEffect(() => {
+    if (!isAnyStreaming) {
       setStreamHint(null);
       setStreamStart(null);
       setElapsedText("0s");
@@ -87,10 +191,10 @@ export function ChatPanel({
       const pick = hints[Math.floor(Math.random() * hints.length)];
       setStreamHint(pick);
     }
-  }, [isStreaming, streamHint]);
+  }, [isAnyStreaming, streamHint]);
 
   useEffect(() => {
-    if (!isStreaming) return;
+    if (!isAnyStreaming) return;
     if (!streamStart) {
       setStreamStart(Date.now());
       return;
@@ -102,7 +206,7 @@ export function ChatPanel({
       setElapsedText(m > 0 ? `${m}m ${s}s` : `${s}s`);
     }, 1000);
     return () => clearInterval(interval);
-  }, [isStreaming, streamStart]);
+  }, [isAnyStreaming, streamStart]);
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -118,7 +222,7 @@ export function ChatPanel({
   }, [input, adjustTextareaHeight]);
 
   const sendMessage = async () => {
-    if (!input.trim() || isStreaming || disabled) return;
+    if (!input.trim() || isAnyStreaming || disabled) return;
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -146,7 +250,8 @@ export function ChatPanel({
       const response = await sendChatMessageAPI(
         projectId,
         userMessage.content,
-        threadId || undefined
+        threadId || undefined,
+        selectedModel || undefined
       );
       setCurrentTaskId(response.task_id);
       onThreadIdChange(response.thread_id);
@@ -238,7 +343,7 @@ export function ChatPanel({
       case "tool_call_result":
         if (event.content) {
           onMessagesChange((prev) => {
-            const lastToolIdx = prev.findLastIndex((m) => m.role === "tool");
+            const lastToolIdx = prev.findLastIndex((m: ChatMessage) => m.role === "tool");
             if (lastToolIdx >= 0) {
               const newMessages = [...prev];
               newMessages[lastToolIdx] = {
@@ -308,10 +413,20 @@ export function ChatPanel({
 
       case "status":
         if (event.content) {
-          const status = (event.content as { status?: string }).status;
+          const statusData = event.content as { status?: string; error_message?: string };
+          const status = statusData.status;
           if (status === "success" || status === "failed" || status === "stopped") {
             setIsStreaming(false);
             cancelStreamRef.current = null;
+            if (status === "failed" && statusData.error_message) {
+              onMessagesChange((prev) =>
+                prev.map((msg) =>
+                  msg.id === assistantMessageId
+                    ? { ...msg, content: msg.content || `Error: ${statusData.error_message}` }
+                    : msg
+                )
+              );
+            }
           }
         }
         break;
@@ -349,12 +464,23 @@ export function ChatPanel({
         break;
 
       case "error":
+        if (event.message || event.content) {
+          const errMsg = event.message || String(event.content);
+          onMessagesChange((prev) =>
+            prev.map((msg) =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: msg.content || `Error: ${errMsg}` }
+                : msg
+            )
+          );
+        }
         setIsStreaming(false);
         break;
     }
   };
 
   const stopChat = async () => {
+    // 停止聊天串流
     if (cancelStreamRef.current) {
       cancelStreamRef.current();
       cancelStreamRef.current = null;
@@ -367,6 +493,15 @@ export function ChatPanel({
       }
     }
     setIsStreaming(false);
+
+    // 停止 Agent Run
+    if (currentRun && currentRun.status === 'RUNNING') {
+      try {
+        await stopAgentRunAPI(projectId, currentRun.id);
+      } catch (error) {
+        console.error("Failed to stop agent run:", error);
+      }
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -377,61 +512,86 @@ export function ChatPanel({
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-900">
+    <div className="h-full flex flex-col bg-background">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {loadingHistory && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <Loader2 className="w-3 h-3 animate-spin" />
-            Loading history...
-          </div>
-        )}
-        {!loadingHistory && messages.length === 0 ? (
-          <EmptyState title="Start a conversation" icon={<Bot className="w-10 h-10" />} />
-        ) : (
-          messages.map((msg) => <MessageEntry key={msg.id} message={msg} isStreaming={isStreaming} />)
-        )}
-        <div ref={messagesEndRef} />
-      </div>
+      <ScrollArea className="flex-1" scrollbar="both">
+        <div className="px-4 py-3 space-y-3">
+          {loadingHistory && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Loading history...
+            </div>
+          )}
+          {!loadingHistory && messages.length === 0 ? (
+            <EmptyState title="Start a conversation" icon={<Bot className="w-10 h-10" />} />
+          ) : (
+            messages.map((msg) => <MessageEntry key={msg.id} message={msg} isStreaming={isAnyStreaming} />)
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
 
       {/* Input */}
       <div className="p-2">
-        <div className="flex items-end gap-2 bg-gray-800 rounded-xl border border-gray-700 focus-within:border-gray-600 transition-colors">
+        <div className="bg-secondary rounded-lg border border-border focus-within:border-muted-foreground/30 transition-colors">
           {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={disabled ? "Project not ready..." : "Message..."}
-            disabled={isStreaming || disabled}
-            className="flex-1 bg-transparent px-3 py-2.5 text-sm text-gray-100 placeholder-gray-500 resize-none focus:outline-none min-h-[24px] max-h-[200px] leading-relaxed"
+            placeholder={disabled ? "Project not ready..." : isAgentRunning ? "Agent is running..." : "Message..."}
+            disabled={isAnyStreaming || disabled}
+            className="w-full bg-transparent px-3 py-2.5 text-sm text-foreground placeholder-muted-foreground resize-none focus:outline-none min-h-[24px] max-h-[200px] leading-relaxed"
             rows={1}
           />
 
-          {/* Send/Stop Button */}
-          {isStreaming ? (
-            <button
-              onClick={stopChat}
-              className="flex-shrink-0 w-8 h-8 mr-1.5 mb-1.5 rounded-lg bg-gray-600 hover:bg-gray-500 text-white flex items-center justify-center transition-colors"
-            >
-              <Square className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || disabled}
-              className="flex-shrink-0 w-8 h-8 mr-1.5 mb-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 text-white disabled:text-gray-500 flex items-center justify-center transition-colors disabled:cursor-not-allowed"
-            >
-              <ArrowUp className="w-4 h-4" />
-            </button>
-          )}
+          {/* Bottom bar: Model selector + Send button */}
+          <div className="flex items-center justify-between px-1.5 pb-1.5">
+            <ModelSelector
+              value={selectedModel}
+              onChange={setSelectedModel}
+              disabled={isAnyStreaming || disabled}
+            />
+
+            {/* Send/Stop Button */}
+            {isAnyStreaming ? (
+              <button
+                onClick={stopChat}
+                className="flex-shrink-0 w-7 h-7 rounded-lg bg-red-600 hover:bg-red-500 text-white flex items-center justify-center transition-colors"
+                title="Stop"
+              >
+                <Square className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                onClick={sendMessage}
+                disabled={!input.trim() || disabled || isAgentRunning}
+                className="flex-shrink-0 w-7 h-7 rounded-lg bg-brand-blue-500 hover:bg-brand-blue-400 disabled:bg-secondary text-white disabled:text-muted-foreground flex items-center justify-center transition-colors disabled:cursor-not-allowed"
+                title="Send message"
+              >
+                <ArrowUp className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
-        {isStreaming && streamHint && (
-          <div className="px-2 pt-2 text-[11px] text-gray-500">
-            {streamHint} ({elapsedText} · {formatTokens(tokenUsage)} tokens)
+        {isAnyStreaming && (
+          <div className="px-2 pt-2 text-[11px] text-muted-foreground flex items-center gap-2">
+            {isReconnecting && <span className="text-brand-blue-400 animate-pulse">重新連線中...</span>}
+            {!isReconnecting && streamHint && (
+              <span>
+                {streamHint} ({elapsedText} · {formatTokens(tokenUsage)} tokens)
+              </span>
+            )}
           </div>
         )}
+      </div>
+
+      {/* Toast 通知 */}
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {toast.toasts.map((t) => (
+          <Toast key={t.id} {...t} />
+        ))}
       </div>
     </div>
   );
@@ -458,10 +618,10 @@ function MessageEntry({ message, isStreaming }: { message: ChatMessage; isStream
   if (role === "user") {
     return (
       <div className="flex gap-2 justify-end">
-        <div className="max-w-[80%] bg-purple-600 rounded-lg px-3 py-2">
+        <div className="max-w-[80%] bg-brand-blue-500 rounded-lg px-3 py-2">
           <p className="text-sm text-white whitespace-pre-wrap">{content}</p>
         </div>
-        <User className="w-4 h-4 text-purple-400 mt-1 flex-shrink-0" />
+        <User className="w-4 h-4 text-brand-blue-400 mt-1 flex-shrink-0" />
       </div>
     );
   }
@@ -492,26 +652,26 @@ function MessageEntry({ message, isStreaming }: { message: ChatMessage; isStream
         <Wrench className="w-4 h-4 text-blue-400 mt-1 flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="text-sm text-blue-400 font-mono">{displayName}</div>
-          {displayMeta && <div className="text-[10px] text-gray-500">{displayMeta}</div>}
+          {displayMeta && <div className="text-[10px] text-muted-foreground">{displayMeta}</div>}
           {subagentDescription && (
-            <div className="text-xs text-gray-500 mt-1">{subagentDescription}</div>
+            <div className="text-xs text-muted-foreground mt-1">{subagentDescription}</div>
           )}
           {displayArgs && Object.keys(displayArgs).length > 0 && (
             <details className="mt-1">
-              <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-400">
+              <summary className="text-xs text-muted-foreground cursor-pointer hover:text-muted-foreground">
                 Args
               </summary>
-              <pre className="text-xs text-gray-400 mt-1 overflow-x-auto">
+              <pre className="text-xs text-muted-foreground mt-1 overflow-x-auto">
                 {JSON.stringify(displayArgs, null, 2)}
               </pre>
             </details>
           )}
           {toolOutput ? (
-            <pre className="text-xs text-gray-400 mt-1 whitespace-pre-wrap overflow-x-auto max-h-40 overflow-y-auto">
+            <pre className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap overflow-x-auto max-h-40 overflow-y-auto">
               {toolOutput}
             </pre>
           ) : (
-            <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1">
               <Loader2 className="w-3 h-3 animate-spin" />
               Running...
             </div>
@@ -524,14 +684,14 @@ function MessageEntry({ message, isStreaming }: { message: ChatMessage; isStream
   // Assistant message
   return (
     <div className="flex gap-2">
-      <Bot className="w-4 h-4 text-purple-400 mt-1 flex-shrink-0" />
+      <Bot className="w-4 h-4 text-brand-blue-400 mt-1 flex-shrink-0" />
       <div className="flex-1 min-w-0">
         {content ? (
-          <div className="text-sm text-gray-200 prose prose-invert prose-sm max-w-none">
+          <div className="text-sm text-secondary-foreground prose prose-invert prose-sm max-w-none">
             <ReactMarkdown>{content}</ReactMarkdown>
           </div>
         ) : (
-          isStreaming && <span className="inline-block w-2 h-4 bg-gray-400 animate-pulse" />
+          isStreaming && <span className="inline-block w-2 h-4 bg-muted-foreground animate-pulse" />
         )}
       </div>
     </div>

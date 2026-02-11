@@ -215,7 +215,7 @@ check_env_file() {
     fi
 
     # JWT_SECRET_KEY
-    if [ -n "$JWT_SECRET_KEY" ] && [ "$JWT_SECRET_KEY" != "your-super-secret-jwt-key-change-this-in-production" ]; then
+    if [ -n "$JWT_SECRET_KEY" ] && [ "$JWT_SECRET_KEY" != "your-secret-key-change-in-production-please" ]; then
       print_success "JWT_SECRET_KEY 已設定"
     else
       print_warning "JWT_SECRET_KEY 使用預設值（不安全）"

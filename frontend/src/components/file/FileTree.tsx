@@ -3,6 +3,7 @@ import { ChevronRight, ChevronDown, Folder, FolderOpen } from 'lucide-react'
 import { FileIcon } from './FileIcon'
 import type { FileTreeNode } from '@/types/file.types'
 import { EmptyState } from '@/components/ui/EmptyState'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 interface FileTreeProps {
   tree: FileTreeNode[]
@@ -12,21 +13,23 @@ interface FileTreeProps {
 
 export const FileTree = memo(function FileTree({ tree, onFileSelect, selectedPath }: FileTreeProps) {
   return (
-    <div className="h-full overflow-y-auto p-2 bg-gray-900">
-      {tree.length === 0 ? (
-        <EmptyState title="No files" />
-      ) : (
-        tree.map((node) => (
-          <TreeNode
-            key={node.path}
-            node={node}
-            depth={0}
-            onFileSelect={onFileSelect}
-            selectedPath={selectedPath}
-          />
-        ))
-      )}
-    </div>
+    <ScrollArea className="h-full bg-background">
+      <div className="p-2">
+        {tree.length === 0 ? (
+          <EmptyState title="No files" />
+        ) : (
+          tree.map((node) => (
+            <TreeNode
+              key={node.path}
+              node={node}
+              depth={0}
+              onFileSelect={onFileSelect}
+              selectedPath={selectedPath}
+            />
+          ))
+        )}
+      </div>
+    </ScrollArea>
   )
 })
 
@@ -55,8 +58,8 @@ function TreeNode({ node, depth, onFileSelect, selectedPath }: TreeNodeProps) {
   return (
     <div>
       <div
-        className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer text-sm hover:bg-gray-800 ${
-          isSelected ? 'bg-gray-800 text-white' : 'text-gray-300'
+        className={`flex items-center gap-1 py-0.5 px-1 rounded cursor-pointer text-sm hover:bg-secondary ${
+          isSelected ? 'bg-secondary text-white' : 'text-secondary-foreground'
         }`}
         style={{ paddingLeft }}
         onClick={handleClick}
@@ -64,9 +67,9 @@ function TreeNode({ node, depth, onFileSelect, selectedPath }: TreeNodeProps) {
         {isDirectory ? (
           <>
             {isExpanded ? (
-              <ChevronDown className="w-3 h-3 text-gray-500 flex-shrink-0" />
+              <ChevronDown className="w-3 h-3 text-muted-foreground flex-shrink-0" />
             ) : (
-              <ChevronRight className="w-3 h-3 text-gray-500 flex-shrink-0" />
+              <ChevronRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
             )}
             {isExpanded ? (
               <FolderOpen className="w-4 h-4 text-yellow-500 flex-shrink-0" />

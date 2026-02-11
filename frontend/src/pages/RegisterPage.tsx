@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { ReforgeLogo } from '@/components/brand/ReforgeLogo'
 import { apiErrorMessage } from '@/utils/apiError'
 
 export default function RegisterPage() {
@@ -53,18 +54,18 @@ export default function RegisterPage() {
 
       if (status === 400 || status === 422) {
         if (detail?.includes('email') || detail?.includes('Email')) {
-          setError('❌ Email 已被使用或格式不正確')
+          setError('Email 已被使用或格式不正確')
         } else if (detail?.includes('username') || detail?.includes('Username')) {
-          setError('❌ 使用者名稱已被使用或格式不正確')
+          setError('使用者名稱已被使用或格式不正確')
         } else if (detail?.includes('password') || detail?.includes('Password')) {
-          setError('⚠️ 密碼格式不正確（必須至少 8 個字元）')
+          setError('密碼格式不正確（必須至少 8 個字元）')
         } else {
-          setError('⚠️ ' + detail || '輸入格式不正確，請檢查所有欄位')
+          setError(detail || '輸入格式不正確，請檢查所有欄位')
         }
       } else if (status === 500) {
-        setError('🔧 伺服器錯誤，請稍後再試')
+        setError('伺服器錯誤，請稍後再試')
       } else if (err.code === 'ERR_NETWORK') {
-        setError('📡 無法連線到伺服器，請檢查網路連線')
+        setError('無法連線到伺服器，請檢查網路連線')
       } else {
         setError(apiErrorMessage(err, '註冊失敗，請重試'))
       }
@@ -74,21 +75,20 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-brand-gradient">
+      <Card className="w-full max-w-md backdrop-blur-sm bg-card/80 border-border">
         <CardHeader>
           <div className="flex justify-center mb-4">
-            <div className="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center text-white text-xl font-bold">
-              smo
-            </div>
+            <ReforgeLogo size="lg" />
           </div>
-          <CardTitle className="text-center text-gray-100">註冊新帳號</CardTitle>
+          <CardTitle className="text-center">
+            <span className="text-brand-gradient">註冊新帳號</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
               <div className="bg-red-900/30 border border-red-700/50 text-red-400 p-4 rounded-lg flex items-start gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
-                <span className="text-xl flex-shrink-0">⚠️</span>
                 <div className="flex-1">
                   <div className="font-semibold mb-1">註冊失敗</div>
                   <div className="text-sm">{error}</div>
@@ -97,7 +97,7 @@ export default function RegisterPage() {
             )}
 
             <div>
-              <label className="block text-sm font-medium mb-1 text-gray-200">Email</label>
+              <label className="block text-sm font-medium mb-1 text-foreground">Email</label>
               <Input
                 type="email"
                 value={email}
@@ -105,11 +105,11 @@ export default function RegisterPage() {
                 required
                 placeholder="your@email.com"
               />
-              <p className="text-xs text-gray-400 mt-1">必須是有效的 Email 格式</p>
+              <p className="text-xs text-muted-foreground mt-1">必須是有效的 Email 格式</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1 text-gray-200">使用者名稱</label>
+              <label className="block text-sm font-medium mb-1 text-foreground">使用者名稱</label>
               <Input
                 type="text"
                 value={username}
@@ -118,11 +118,11 @@ export default function RegisterPage() {
                 minLength={3}
                 placeholder="username"
               />
-              <p className="text-xs text-gray-400 mt-1">至少 3 個字元，最多 50 個字元</p>
+              <p className="text-xs text-muted-foreground mt-1">至少 3 個字元，最多 50 個字元</p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-1 text-gray-200">密碼</label>
+              <label className="block text-sm font-medium mb-1 text-foreground">密碼</label>
               <Input
                 type="password"
                 value={password}
@@ -131,16 +131,16 @@ export default function RegisterPage() {
                 minLength={8}
                 placeholder="至少 8 個字元"
               />
-              <p className="text-xs text-gray-400 mt-1">至少 8 個字元，最多 100 個字元</p>
+              <p className="text-xs text-muted-foreground mt-1">至少 8 個字元，最多 100 個字元</p>
             </div>
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? '註冊中...' : '註冊'}
             </Button>
 
-            <div className="text-center text-sm text-gray-400">
+            <div className="text-center text-sm text-muted-foreground">
               已有帳號？{' '}
-              <Link to="/login" className="text-purple-400 hover:underline">
+              <Link to="/login" className="text-brand-blue-400 hover:underline">
                 登入
               </Link>
             </div>

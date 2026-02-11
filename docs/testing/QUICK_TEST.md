@@ -81,7 +81,7 @@ python3 cli.py
 # 檢查 Backend 是否運行
 curl http://localhost:8000/api/v1/auth/login -X POST \
   -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"testpass123"}'
+  -d '{"username":"test","password":"testpass123"}'
 ```
 
 ### 2. Provision 失敗

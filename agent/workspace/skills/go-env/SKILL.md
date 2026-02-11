@@ -1,101 +1,101 @@
 ---
 name: go-env-setup
-description: 使用此技能來設置 Go 開發環境、管理依賴、編譯和執行 Go 程式碼。當用戶請求設置 Go 環境、安裝 Go 模組、或執行 Go 程式碼遇到問題時使用。
+description: Use this skill to set up Go development environment, manage dependencies, compile and run Go code. Use when user requests Go environment setup, module installation, or encounters issues running Go code.
 ---
 
-# Go 環境設置技能
+# Go Environment Setup Skill
 
-## 概述
+## Overview
 
-此技能指導你如何在工作區中設置和管理 Go 開發環境。
+This skill guides you on how to set up and manage a Go development environment in the workspace.
 
-## 環境檢查
+## Environment Check
 
-### 1. 檢查 Go 版本
+### 1. Check Go Version
 
-首先使用 `bash` 工具檢查已安裝的 Go 版本：
+First, use the `bash` tool to check the installed Go version:
 
 ```
 bash(command="go version")
 ```
 
-預期輸出類似：`go version go1.21.0 linux/amd64`
+Expected output similar to: `go version go1.21.0 linux/amd64`
 
-### 2. 檢查 Go 環境變數
+### 2. Check Go Environment Variables
 
 ```
 bash(command="go env GOPATH GOROOT GOCACHE")
 ```
 
-## Go Modules 管理
+## Go Modules Management
 
-### 初始化新模組
+### Initialize New Module
 
-如果專案沒有 `go.mod` 檔案：
+If the project doesn't have a `go.mod` file:
 
 ```
 bash(command="go mod init <module_name>")
 ```
 
-例如：
+Example:
 ```
 bash(command="go mod init github.com/user/project")
 ```
 
-### 下載依賴
+### Download Dependencies
 
 ```
 bash(command="go mod download")
 ```
 
-### 整理依賴
+### Tidy Dependencies
 
-自動添加缺失的依賴，移除未使用的依賴：
+Automatically add missing dependencies and remove unused ones:
 
 ```
 bash(command="go mod tidy")
 ```
 
-### 安裝特定套件
+### Install Specific Package
 
 ```
 bash(command="go get <package_path>")
 ```
 
-常用套件範例：
-- `github.com/gin-gonic/gin` - Web 框架
-- `github.com/stretchr/testify` - 測試工具
-- `github.com/spf13/cobra` - CLI 框架
-- `gorm.io/gorm` - ORM 框架
+Common package examples:
+- `github.com/gin-gonic/gin` - Web framework
+- `github.com/stretchr/testify` - Testing toolkit
+- `github.com/spf13/cobra` - CLI framework
+- `gorm.io/gorm` - ORM library
 
-## 執行 Go 程式碼
+## Running Go Code
 
-### 執行現有專案
+### Run Existing Project
 
-執行 main package：
+Run main package:
 
 ```
 bash(command="go run .")
 ```
 
-執行特定檔案：
+Run specific file:
 
 ```
 bash(command="go run main.go")
 ```
 
-執行子目錄的 main：
+Run main in subdirectory:
 
 ```
 bash(command="go run ./cmd/server")
 ```
 
-### 執行程式碼片段
+### Run Code Snippet
 
-先用 `write_file` 寫入檔案，再執行：
+First write to a file using `write_file`, then run it:
 
 ```
-write_file("/workspace/repo/hello.go", """
+write_file("./repo/hello.go", """
 package main
 
 import "fmt"
@@ -104,100 +104,284 @@ func main() {
     fmt.Println("Hello, Go!")
 }
 """)
-bash(command="go run /workspace/repo/hello.go")
+bash(command="go run ./repo/hello.go")
 ```
 
-## 編譯
+## Compilation
 
-### 編譯當前模組
+### Compile Current Module
 
 ```
 bash(command="go build -o app .")
 ```
 
-### 編譯特定平台
+### Compile for Specific Platform
 
 ```
 bash(command="GOOS=linux GOARCH=amd64 go build -o app-linux .")
 ```
 
-## 測試
+## Testing
 
-### 執行所有測試
+### Run All Tests
 
 ```
 bash(command="go test ./...")
 ```
 
-### 執行測試並顯示詳細輸出
+### Run Tests with Verbose Output
 
 ```
 bash(command="go test -v ./...")
 ```
 
-### 執行特定測試
+### Run Specific Test
 
 ```
 bash(command="go test -v -run TestFunctionName ./...")
 ```
 
-### 測試覆蓋率
+### Test Coverage
 
 ```
 bash(command="go test -cover ./...")
 ```
 
-## 程式碼品質
+## Code Quality
 
-### 格式化程式碼
+### Format Code
 
 ```
 bash(command="go fmt ./...")
 ```
 
-### 靜態分析
+### Static Analysis
 
 ```
 bash(command="go vet ./...")
 ```
 
-### 安裝並執行 golangci-lint
+### Install and Run golangci-lint
 
 ```
 bash(command="go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest")
 bash(command="golangci-lint run")
 ```
 
-## 常見問題排解
+## Gin Web Framework
 
-### 找不到模組
+### Install Gin
 
-當遇到 `cannot find module` 錯誤：
+```
+bash(command="go get -u github.com/gin-gonic/gin")
+```
 
-1. 確認專案有 `go.mod` 檔案
-2. 執行 `go mod tidy` 下載依賴
-3. 檢查模組路徑是否正確
+### Basic Gin Application
 
-### 編譯錯誤
+Create a simple Gin web server:
 
-使用詳細輸出來診斷：
+```
+write_file("./repo/main.go", """
+package main
+
+import (
+    "github.com/gin-gonic/gin"
+    "net/http"
+)
+
+func main() {
+    r := gin.Default()
+    
+    r.GET("/ping", func(c *gin.Context) {
+        c.JSON(http.StatusOK, gin.H{
+            "message": "pong",
+        })
+    })
+    
+    r.Run(":8080")
+}
+""")
+bash(command="go run main.go")
+```
+
+### Gin Routing Setup
+
+#### RESTful API Routes
+
+```go
+r := gin.Default()
+
+// GET request
+r.GET("/users", getUsers)
+r.GET("/users/:id", getUserByID)
+
+// POST request
+r.POST("/users", createUser)
+
+// PUT request
+r.PUT("/users/:id", updateUser)
+
+// DELETE request
+r.DELETE("/users/:id", deleteUser)
+```
+
+#### Route Groups
+
+```go
+v1 := r.Group("/api/v1")
+{
+    v1.GET("/users", getUsers)
+    v1.POST("/users", createUser)
+}
+
+v2 := r.Group("/api/v2")
+{
+    v2.GET("/users", getUsersV2)
+}
+```
+
+### Gin Middleware
+
+#### Use Built-in Middleware
+
+```go
+r := gin.Default() // Includes Logger and Recovery middleware
+
+// Or add manually
+r := gin.New()
+r.Use(gin.Logger())
+r.Use(gin.Recovery())
+```
+
+#### Custom Middleware
+
+```go
+func AuthMiddleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        token := c.GetHeader("Authorization")
+        if token == "" {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+            c.Abort()
+            return
+        }
+        c.Next()
+    }
+}
+
+// Use middleware
+r.Use(AuthMiddleware())
+```
+
+### Gin Request Handling
+
+#### Bind JSON Request
+
+```go
+type User struct {
+    Name  string `json:"name" binding:"required"`
+    Email string `json:"email" binding:"required,email"`
+}
+
+func createUser(c *gin.Context) {
+    var user User
+    if err := c.ShouldBindJSON(&user); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, user)
+}
+```
+
+#### Query Parameters
+
+```go
+func getUsers(c *gin.Context) {
+    page := c.DefaultQuery("page", "1")
+    limit := c.Query("limit")
+    c.JSON(http.StatusOK, gin.H{
+        "page": page,
+        "limit": limit,
+    })
+}
+```
+
+### Run Gin Application
+
+#### Development Mode
+
+```
+bash(command="go run main.go")
+```
+
+#### Compile and Run
+
+```
+bash(command="go build -o server .")
+bash(command="./server")
+```
+
+#### Specify Port
+
+```go
+r.Run(":3000") // Run on port 3000
+```
+
+### Gin Testing
+
+Test Gin handler:
+
+```go
+func TestPingRoute(t *testing.T) {
+    router := gin.Default()
+    router.GET("/ping", func(c *gin.Context) {
+        c.JSON(200, gin.H{"message": "pong"})
+    })
+
+    w := httptest.NewRecorder()
+    req, _ := http.NewRequest("GET", "/ping", nil)
+    router.ServeHTTP(w, req)
+
+    assert.Equal(t, 200, w.Code)
+    assert.Contains(t, w.Body.String(), "pong")
+}
+```
+
+Run tests:
+
+```
+bash(command="go test -v ./...")
+```
+
+## Troubleshooting
+
+### Module Not Found
+
+When encountering `cannot find module` error:
+
+1. Confirm project has `go.mod` file
+2. Run `go mod tidy` to download dependencies
+3. Check if module path is correct
+
+### Compilation Errors
+
+Use verbose output to diagnose:
 
 ```
 bash(command="go build -v ./...")
 ```
 
-### 權限問題（GOCACHE）
+### Permission Issues (GOCACHE)
 
-設置可寫的 cache 目錄：
+Set writable cache directory:
 
 ```
 bash(command="GOCACHE=/tmp/go-cache go build .")
 ```
 
-## 最佳實踐
+## Best Practices
 
-1. **總是先檢查 go.mod** - 了解專案的模組名稱和依賴
-2. **使用 go mod tidy** - 保持依賴整潔
-3. **執行前先下載依賴** - `go mod download`
-4. **使用 go vet 檢查程式碼** - 發現潛在問題
-5. **測試前格式化** - `go fmt ./...`
+1. **Always check go.mod first** - Understand project module name and dependencies
+2. **Use go mod tidy** - Keep dependencies clean
+3. **Download dependencies before running** - `go mod download`
+4. **Use go vet to check code** - Find potential issues
+5. **Format before testing** - `go fmt ./...`

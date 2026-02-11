@@ -9,10 +9,12 @@ WORKDIR /app
 COPY frontend/package*.json ./
 
 # 安裝依賴（包含 build 所需的 devDependencies）
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --cache /root/.npm
 
 # 建置時注入 API Base URL（Vite 會在 build 時讀取）
-ARG VITE_API_BASE_URL=http://localhost:8000
+# 空字串表示使用相對路徑，通過 Nginx 反向代理
+ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 # 複製前端代碼

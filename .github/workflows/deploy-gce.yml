@@ -1,0 +1,404 @@
+name: Deploy to GCE
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
+
+env:
+  REGISTRY_HOST: ${{ vars.REGISTRY_HOST }}
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GAR_REPOSITORY: ${{ vars.GAR_REPOSITORY }}
+  # Optional. If set, deploy will run as this OS user on the VM (avoids defaulting to "runner").
+  GCE_SSH_USER: ${{ vars.GCE_SSH_USER }}
+  # Optional. Absolute path recommended, e.g. /opt/auto-refactor-agent
+  GCE_APP_DIR: ${{ vars.GCE_APP_DIR }}
+  # Prevent gcloud from prompting (important because we use heredoc stdin for the remote script).
+  CLOUDSDK_CORE_DISABLE_PROMPTS: "1"
+
+jobs:
+  deploy:
+    name: Deploy to GCE
+    runs-on: ubuntu-latest
+    # 只在 CI/CD Pipeline 成功且是 push to main 或 manual dispatch 時執行
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          echo "IMAGE_TAG=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "GCE_INSTANCE=${{ vars.GCE_INSTANCE }}" >> $GITHUB_ENV
+          echo "GCE_ZONE=${{ vars.GCE_ZONE }}" >> $GITHUB_ENV
+          echo "GCE_SSH_USER=${{ vars.GCE_SSH_USER }}" >> $GITHUB_ENV
+          echo "GCE_APP_DIR=${{ vars.GCE_APP_DIR }}" >> $GITHUB_ENV
+          # 將 secrets 設置為環境變數
+          echo "DEPLOY_ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}" >> $GITHUB_ENV
+          echo "DEPLOY_JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}" >> $GITHUB_ENV
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Prepare SSH for gcloud (non-interactive)
+        run: |
+          set -euo pipefail
+
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+
+          # gcloud compute ssh defaults to ~/.ssh/google_compute_engine
+          if [ ! -f ~/.ssh/google_compute_engine ]; then
+            ssh-keygen -t rsa -b 3072 -f ~/.ssh/google_compute_engine -N "" -C "gha-${GITHUB_RUN_ID}"
+          fi
+
+          chmod 600 ~/.ssh/google_compute_engine
+          chmod 644 ~/.ssh/google_compute_engine.pub
+
+      - name: Deploy to GCE
+        run: |
+          set -euo pipefail
+
+          echo "============================================"
+          echo "🚀 Deploying to GCE"
+          echo "============================================"
+          echo "Instance: ${{ env.GCE_INSTANCE }}"
+          echo "Zone: ${{ env.GCE_ZONE }}"
+          echo "Image Tag: ${{ env.IMAGE_TAG }}"
+          echo "============================================"
+
+          SSH_TARGET="${{ env.GCE_INSTANCE }}"
+          if [ -n "${GCE_SSH_USER:-}" ]; then
+            SSH_TARGET="${GCE_SSH_USER}@${{ env.GCE_INSTANCE }}"
+          fi
+
+          # SSH 到 GCE 並執行部署腳本
+          # 將 secrets 作為參數傳遞到遠端腳本
+          gcloud compute ssh "$SSH_TARGET" \
+            --zone=${{ env.GCE_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --quiet \
+            --ssh-flag="-o BatchMode=yes" \
+            --ssh-flag="-o StrictHostKeyChecking=no" \
+            --ssh-flag="-o UserKnownHostsFile=/dev/null" \
+            --command="bash -s '${{ env.DEPLOY_ANTHROPIC_API_KEY }}' '${{ env.DEPLOY_JWT_SECRET_KEY }}'" << 'ENDSSH'
+              set -euo pipefail
+
+              # 接收傳入的 secrets
+              REMOTE_ANTHROPIC_API_KEY="$1"
+              REMOTE_JWT_SECRET_KEY="$2"
+
+              APP_DIR="${{ env.GCE_APP_DIR }}"
+              if [ -z "$APP_DIR" ]; then
+                APP_DIR="$HOME/auto-refactor-agent"
+              fi
+
+              echo "📦 Authenticating Docker with GAR..."
+              if command -v gcloud >/dev/null 2>&1; then
+                gcloud auth configure-docker ${{ env.REGISTRY_HOST }} --quiet
+              else
+                # No gcloud on the VM. Use the instance service account token from metadata server.
+                if ! command -v curl >/dev/null 2>&1; then
+                  echo "❌ curl is required to fetch metadata token (gcloud not found)"
+                  exit 1
+                fi
+                TOKEN_JSON="$(curl -fsS -H 'Metadata-Flavor: Google' \
+                  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token')"
+                # Extract "access_token" without relying on python/jq.
+                ACCESS_TOKEN="$(printf '%s' "$TOKEN_JSON" | sed -n 's/.*\"access_token\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p')"
+                if [ -z "$ACCESS_TOKEN" ]; then
+                  echo "❌ Failed to fetch access token from metadata server"
+                  exit 1
+                fi
+                echo "$ACCESS_TOKEN" | docker login -u oauth2accesstoken --password-stdin "https://${{ env.REGISTRY_HOST }}"
+              fi
+
+              echo "📥 Pulling images..."
+              pull_or_fallback() {
+                local image="$1"
+                local tag="$2"
+                if docker pull "${image}:${tag}"; then
+                  return
+                fi
+                echo "⚠️  ${image}:${tag} not found. Falling back to :latest"
+                docker pull "${image}:latest"
+                # Tag fallback as the expected tag so compose can use it.
+                docker tag "${image}:latest" "${image}:${tag}"
+              }
+
+              pull_or_fallback ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base ${{ env.IMAGE_TAG }}
+              pull_or_fallback ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api ${{ env.IMAGE_TAG }}
+              pull_or_fallback ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend ${{ env.IMAGE_TAG }}
+
+              # Tag as latest
+              docker tag ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-base:${{ env.IMAGE_TAG }} refactor-base:latest
+              docker tag ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }} refactor-api:latest
+              docker tag ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }} refactor-frontend:latest
+
+              echo "🔄 Updating services with docker-compose..."
+              mkdir -p "$APP_DIR"
+              cd "$APP_DIR"
+
+              compose() {
+                if command -v docker-compose >/dev/null 2>&1; then
+                  docker-compose "$@"
+                  return
+                fi
+                if docker compose version >/dev/null 2>&1; then
+                  docker compose "$@"
+                  return
+                fi
+                # Last resort: run Compose v2 in a container (works even on minimal COS images).
+                docker run --rm \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  -v "$PWD:$PWD" -w "$PWD" \
+                  docker/compose:2.27.0 "$@"
+              }
+
+              # Ensure workspace host dir exists for volume mount.
+              WORKSPACE_HOST_DIR="/var/lib/refactor-workspaces"
+              if command -v sudo >/dev/null 2>&1; then
+                sudo mkdir -p "$WORKSPACE_HOST_DIR" || mkdir -p "$WORKSPACE_HOST_DIR"
+              else
+                mkdir -p "$WORKSPACE_HOST_DIR"
+              fi
+
+              # Create backend env file on first deploy. Keep it stable across deploys.
+              if [ ! -f backend.env ]; then
+                # 使用傳入的 JWT_SECRET_KEY，如果為空則生成一個
+                if [ -z "$REMOTE_JWT_SECRET_KEY" ]; then
+                  if command -v openssl >/dev/null 2>&1; then
+                    REMOTE_JWT_SECRET_KEY="$(openssl rand -hex 32)"
+                  else
+                    REMOTE_JWT_SECRET_KEY="$(date +%s%N)"
+                  fi
+                fi
+
+                cat > backend.env <<EOF
+          # Generated by GitHub Actions (first deploy). Edit on VM if needed.
+          JWT_SECRET_KEY=$REMOTE_JWT_SECRET_KEY
+          ANTHROPIC_API_KEY=$REMOTE_ANTHROPIC_API_KEY
+
+          # Optional: Vertex AI (works best when the VM service account has Vertex permissions)
+          GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
+          GCP_LOCATION=us-central1
+          # NOTE: 模型選擇現在由前端透過 API 參數傳遞，不再需要 VERTEX_AI_MODEL 環境變數
+
+          LOG_LEVEL=INFO
+          EOF
+                chmod 600 backend.env || true
+              fi
+
+              # Ensure secrets are applied on every deploy (without recreating the file)
+              if [ -n "$REMOTE_ANTHROPIC_API_KEY" ]; then
+                tmp_env="$(mktemp)"
+                awk -v val="$REMOTE_ANTHROPIC_API_KEY" '
+                  BEGIN {found=0}
+                  /^ANTHROPIC_API_KEY=/ {print "ANTHROPIC_API_KEY=" val; found=1; next}
+                  {print}
+                  END {if (!found) print "ANTHROPIC_API_KEY=" val}
+                ' backend.env > "$tmp_env" && mv "$tmp_env" backend.env
+                chmod 600 backend.env || true
+              fi
+
+              # 驗證環境變數（僅警告，不阻止部署）
+              echo "🔍 驗證環境變數..."
+
+              # 檢查 JWT_SECRET_KEY（必填）
+              if ! grep -q "^JWT_SECRET_KEY=" backend.env || grep -q "^JWT_SECRET_KEY=$" backend.env || grep -q "^JWT_SECRET_KEY=\"\"$" backend.env; then
+                echo "❌ 錯誤: JWT_SECRET_KEY 未在 backend.env 中設置或為空值"
+                echo "請在 GitHub Settings > Secrets 中配置 JWT_SECRET_KEY"
+                exit 1
+              fi
+
+              # 檢查 ANTHROPIC_API_KEY（可選，僅警告）
+              if ! grep -q "^ANTHROPIC_API_KEY=" backend.env || grep -q "^ANTHROPIC_API_KEY=$" backend.env || grep -q "^ANTHROPIC_API_KEY=\"\"$" backend.env; then
+                echo "⚠️  警告: ANTHROPIC_API_KEY 未在 backend.env 中設置"
+                echo "    Anthropic 模型將無法使用，請在 GitHub Secrets 中配置以啟用"
+              else
+                echo "✅ ANTHROPIC_API_KEY 已配置"
+              fi
+
+              echo "✅ 環境變數驗證通過"
+
+              # Write compose file on every deploy so it always matches the repo version + current IMAGE_TAG.
+              cat > docker-compose.prod.yml <<EOF
+          services:
+            postgres:
+              image: postgres:16
+              container_name: refactor-postgres
+              ports:
+                - "127.0.0.1:5433:5432"
+              volumes:
+                - postgres_data:/var/lib/postgresql/data
+              environment:
+                POSTGRES_USER: langgraph
+                POSTGRES_PASSWORD: langgraph_secret
+                POSTGRES_DB: langgraph
+              networks:
+                - refactor-network
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD-SHELL", "pg_isready -U langgraph"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+
+            mongodb:
+              image: mongo:7
+              container_name: refactor-mongodb
+              ports:
+                - "127.0.0.1:27017:27017"
+              volumes:
+                - mongodb_data:/data/db
+              environment:
+                MONGO_INITDB_DATABASE: refactor_agent
+              networks:
+                - refactor-network
+              restart: unless-stopped
+              healthcheck:
+                test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+                interval: 10s
+                timeout: 5s
+                retries: 5
+
+            api:
+              image: ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-api:${{ env.IMAGE_TAG }}
+              container_name: refactor-api
+              ports:
+                - "127.0.0.1:8000:8000"
+              volumes:
+                - /var/run/docker.sock:/var/run/docker.sock
+                - ${WORKSPACE_HOST_DIR}:/tmp/refactor-workspaces
+              env_file:
+                - ./backend.env
+              environment:
+                - MONGODB_URL=mongodb://mongodb:27017
+                - MONGODB_DATABASE=refactor_agent
+                - POSTGRES_URL=postgresql://langgraph:langgraph_secret@postgres:5432/langgraph
+                - DEBUG=false
+                - DOCKER_BASE_IMAGE=refactor-base:latest
+                - DOCKER_VOLUME_PREFIX=/tmp/refactor-workspaces
+              depends_on:
+                mongodb:
+                  condition: service_healthy
+                postgres:
+                  condition: service_healthy
+              networks:
+                - refactor-network
+              restart: unless-stopped
+
+            frontend:
+              image: ${{ env.REGISTRY_HOST }}/${{ env.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/refactor-frontend:${{ env.IMAGE_TAG }}
+              container_name: refactor-frontend
+              ports:
+                - "80:80"
+              depends_on:
+                - api
+              networks:
+                - refactor-network
+              restart: unless-stopped
+
+          volumes:
+            mongodb_data:
+            postgres_data:
+
+          networks:
+            refactor-network:
+              name: refactor-network
+              driver: bridge
+          EOF
+
+              # 停止並移除舊容器（強制清理所有 refactor-* 容器）
+              compose --project-name refactor -f docker-compose.prod.yml down --remove-orphans || true
+
+              # 額外清理：移除可能殘留的容器
+              for container in refactor-postgres refactor-mongodb refactor-api refactor-frontend; do
+                if docker ps -a --filter "name=^/${container}$" --format '{{.Names}}' | grep -q "^${container}$"; then
+                  echo "🧹 Removing orphan container: ${container}"
+                  docker rm -f "${container}" || true
+                fi
+              done
+
+              # 啟動新容器
+              compose --project-name refactor -f docker-compose.prod.yml up -d
+
+              echo "🧹 Cleaning up old images..."
+              docker image prune -f
+
+              echo "✅ Deployment completed successfully!"
+          ENDSSH
+
+      - name: Health check
+        run: |
+          echo "🏥 Running health check..."
+
+          # 取得 GCE 外部 IP
+          EXTERNAL_IP=$(gcloud compute instances describe ${{ env.GCE_INSTANCE }} \
+            --zone=${{ env.GCE_ZONE }} \
+            --project=${{ env.GCP_PROJECT_ID }} \
+            --format='get(networkInterfaces[0].accessConfigs[0].natIP)')
+
+          echo "Instance IP: $EXTERNAL_IP"
+
+          # 等待服務啟動
+          sleep 30
+
+          # 檢查 API 健康狀態
+          MAX_RETRIES=10
+          RETRY_COUNT=0
+
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            if curl -f -s "http://${EXTERNAL_IP}:80/api/v1/health" > /dev/null; then
+              echo "✅ API is healthy!"
+              break
+            else
+              echo "⏳ Waiting for API to be ready... ($((RETRY_COUNT + 1))/$MAX_RETRIES)"
+              RETRY_COUNT=$((RETRY_COUNT + 1))
+              sleep 10
+            fi
+          done
+
+          if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+            echo "❌ Health check failed after $MAX_RETRIES attempts"
+            exit 1
+          fi
+
+          # 檢查 Frontend
+          if curl -f -s "http://${EXTERNAL_IP}:80" > /dev/null; then
+            echo "✅ Frontend is accessible!"
+          else
+            echo "⚠️ Frontend health check failed"
+          fi
+
+      - name: Deployment summary
+        run: |
+          echo "============================================"
+          echo "✅ Deployment Summary"
+          echo "============================================"
+          echo "Instance: ${{ env.GCE_INSTANCE }}"
+          echo "Image Tag: ${{ env.IMAGE_TAG }}"
+          echo "Deployed Images:"
+          echo "  - refactor-base:${{ env.IMAGE_TAG }}"
+          echo "  - refactor-api:${{ env.IMAGE_TAG }}"
+          echo "  - refactor-frontend:${{ env.IMAGE_TAG }}"
+          echo "============================================"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          echo "Please check the logs and GCE instance status."

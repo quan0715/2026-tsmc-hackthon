@@ -18,6 +18,7 @@ class RunRequest(BaseModel):
     spec: str  # 重構規格說明
     thread_id: Optional[str] = None  # 會話 ID（用於持久化）
     verbose: bool = True
+    model: Optional[str] = None  # 模型 ID
 
 
 class CloneRequest(BaseModel):
@@ -31,6 +32,7 @@ class ChatRequest(BaseModel):
     message: str
     thread_id: str
     verbose: bool = True
+    model: Optional[str] = None  # 模型 ID
 
 
 class ChatResponse(BaseModel):

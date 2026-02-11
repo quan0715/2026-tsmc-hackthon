@@ -49,6 +49,18 @@ temp/
 .token
 *.token
 
+# Local secrets (do not commit)
+.secrets/
+
 # 腳本臨時檔案
 scripts/*.tmp
 scripts/.cache
+
+# ignore test files
+agent/tools/test_new_parsers.py
+agent/tools/test_parsers.py
+
+
+# GCP credentials
+gcp-credentials.json
+**/gcp-credentials.json

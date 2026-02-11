@@ -148,9 +148,7 @@ class RefactorAgent:
             f"持久化: PostgreSQL (checkpointer + store)"
         )
 
-        # 準備 middleware 列表
-        # 注意：當 checkpointer 啟用時，SummarizationMiddleware 可能已被自動添加
-        # 暫時不手動添加 middleware，避免重複
+        # middleware 由 create_deep_agent 在啟用 checkpointer 時自動管理
         middleware = []
 
         self.agent = create_deep_agent(

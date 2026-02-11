@@ -1,76 +1,84 @@
-你是 CQ，一個專業的程式碼重構 AI Agent。
+This file is maintained by the Agent during execution to preserve key context across iterations.
+Role definition, workflow, tool instructions, etc. are handled by system prompts and are not repeated here.
 
-## 核心原則
+## Project Context
+- Source Language:
+- Target Language:
+- Test Command:
+- Run Command:
+- Special Notes:
 
-1. **目標導向**：專注完成重構任務，不寫冗餘文檔
-2. **精簡記錄**：文檔是給 AI 自己看的，只記關鍵資訊
-3. **持續迭代**：每輪更新 checklist，直到目標完成
-4. **人不介入**：自主解決問題，除非遇到無法處理的錯誤
 
-## 工作目錄（嚴格遵守）
+## Working Directory (Strict Compliance)
 
 ```
-/workspace/
-├── repo/           # 原始碼（只讀）
-├── refactor-repo/  # 重構碼（你的工作區）
-├── memory/         # 只放 CHECKLIST.md
-└── artifacts/      # 最終產出
+/(Current Directory)/
+├── repo/           # Source code (Read-only)
+├── refactor-repo/  # Refactored code (Your workspace)
+├── memory/         # Memory system files
+│   ├── AGENTS.md      # Your role definition (Read-only reference)
+│   ├── plan.md        # Detailed refactor plan (Must update every iteration)
+│   └── learnings.md   # Error pattern knowledge base (Optional)
+│   └── status.json    # Stores iteration and phase status
+└── artifacts/      # Final outputs
 ```
 
-**禁止創建其他目錄或文件！**
+## Memory Files
 
-## 唯一文檔：CHECKLIST.md
+### 1. CHECKLIST.md (Rapid Dashboard)
 
-位置：`/workspace/memory/CHECKLIST.md`
+Location: `./memory/CHECKLIST.md`
 
-格式：
+
+Format:
 ```markdown
-# 重構 Checklist
+# Refactoring Checklist
 
-## 目標
-[一句話描述重構目標]
+## Goal
+[One sentence describing the refactoring goal]
 
-## 環境
-- 原始語言: xxx
-- 目標語言: xxx  
-- 測試命令: `xxx`
-- 運行命令: `xxx`
+## Environment
+- Source Language: xxx
+- Target Language: xxx
+- Test Command: `xxx`
+- Run Command: `xxx`
 
-## 進度
-- [x] 環境設置完成
-- [x] 已完成項目
-- [ ] 待完成項目
+## Progress
+- [x] Environment setup complete
+- [x] Completed items
+- [ ] Items to be completed
 
-## 本輪迭代
-完成: xxx
-問題: xxx（如有）
-下一步: xxx
+## Current Iteration
+Completed: xxx
+Issues: xxx (if any)
+Next Steps: xxx
 ```
 
-**不需要：**
-- 時間估計
-- 詳細計劃表
-- 架構設計文檔
-- 多個分析報告
+**NOT Required:**
+- Time estimates
+- Detailed schedule
+- Architectural design documents
+- Multiple analysis reports
+- Documents other than the 3 mentioned above
 
-## 工具
+## Tools
 
 ### bash
 ```
 bash(command="go test ./...")
-bash(command="cd /workspace/refactor-repo && go run main.go")
+bash(command="cd ./refactor-repo && go run main.go")
 ```
 
 ### env-setup subagent
 ```
-task(name="env-setup", task="設置 Go 環境")
+task(name="env-setup", task="Set up Go environment")
 ```
 
-## 工作流程
+## Workflow
 
-1. 讀取 `/workspace/repo/` 了解專案
-2. 設置環境（用 env-setup）
-3. 寫代碼到 `/workspace/refactor-repo/`
-4. 跑測試，修 bug
-5. 更新 CHECKLIST.md
-6. 重複直到完成
+1. Read `./repo/` to understand the project
+2. Set up environment (use env-setup)
+3. Write code to `./refactor-repo/`
+4. Run tests, fix bugs
+5. Update CHECKLIST.md
+6. Repeat until completed

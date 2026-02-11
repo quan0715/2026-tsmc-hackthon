@@ -90,7 +90,7 @@ class RefactorCLI:
 
                     # 註冊成功後自動登入取得 token
                     self.print_info("正在自動登入...")
-                    return await self.login(email, password)
+                    return await self.login(username, password)
                 else:
                     self.print_error(f"註冊失敗: {response.text}")
                     return False
@@ -98,19 +98,25 @@ class RefactorCLI:
             self.print_error(f"註冊錯誤: {e}")
             return False
 
-    async def login(self, email: str, password: str) -> bool:
+    async def login(self, username: str, password: str) -> bool:
         """登入"""
         try:
+            # 後端登入以 username 為主；若使用者輸入 email，嘗試推導 username。
+            if "@" in username:
+                derived = username.split("@", 1)[0]
+                self.print_info(f"登入使用 username，已由 email 推導為: {derived}")
+                username = derived
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.api_base_url}/api/v1/auth/login",
-                    json={"email": email, "password": password}
+                    json={"username": username, "password": password}
                 )
 
                 if response.status_code == 200:
                     data = response.json()
                     self.token = data["access_token"]
-                    self.print_success(f"登入成功！使用者: {email}")
+                    self.print_success(f"登入成功！使用者: {username}")
                     return True
                 else:
                     self.print_error(f"登入失敗: {response.text}")
@@ -124,7 +130,7 @@ class RefactorCLI:
         name: str,
         repo_url: str,
         branch: str = "main",
-        init_prompt: str = "請分析此專案並提供重構建議"
+        spec: str = "請分析此專案並提供重構建議"
     ) -> Optional[str]:
         """建立新專案"""
         if not self.token:
@@ -136,9 +142,11 @@ class RefactorCLI:
                 response = await client.post(
                     f"{self.api_base_url}/api/v1/projects",
                     json={
+                        "title": name,
+                        "project_type": "REFACTOR",
                         "repo_url": repo_url,
                         "branch": branch,
-                        "init_prompt": init_prompt
+                        "spec": spec
                     },
                     headers={"Authorization": f"Bearer {self.token}"}
                 )
@@ -544,6 +552,7 @@ async def interactive_mode():
 
     # 預設測試帳號
     DEFAULT_EMAIL = "test@example.com"
+    DEFAULT_USERNAME = "test"
     DEFAULT_PASSWORD = "testpass123"
 
     print("""
@@ -555,27 +564,30 @@ async def interactive_mode():
     # 1. 登入或註冊
     while not cli.token:
         cli.print_header("步驟 1: 登入/註冊")
-        cli.print_info(f"預設測試帳號: {DEFAULT_EMAIL} / {DEFAULT_PASSWORD}")
+        cli.print_info(f"預設測試帳號: {DEFAULT_USERNAME} / {DEFAULT_PASSWORD} (註冊 email: {DEFAULT_EMAIL})")
         action = input("請選擇 (1=登入, 2=註冊, d=使用預設帳號登入, Enter=使用預設帳號登入): ").strip()
 
         # 預設選項或使用預設帳號
         if action == "" or action.lower() == "d":
-            email = DEFAULT_EMAIL
+            username = DEFAULT_USERNAME
             password = DEFAULT_PASSWORD
-            cli.print_info(f"使用預設帳號: {email}")
+            email = DEFAULT_EMAIL
+            cli.print_info(f"使用預設帳號: {username}")
             # 嘗試登入，失敗則自動註冊
-            success = await cli.login(email, password)
+            success = await cli.login(username, password)
             if not success:
                 cli.print_info("預設帳號不存在，自動註冊...")
-                success = await cli.register(email, password)
+                success = await cli.register(email, password, username=username)
         else:
-            email = input("Email (Enter=使用預設): ").strip() or DEFAULT_EMAIL
-            password = input("Password (Enter=使用預設): ").strip() or DEFAULT_PASSWORD
-
             if action == "1":
-                success = await cli.login(email, password)
+                username = input("Username (或 Email, Enter=使用預設): ").strip() or DEFAULT_USERNAME
+                password = input("Password (Enter=使用預設): ").strip() or DEFAULT_PASSWORD
+                success = await cli.login(username, password)
             elif action == "2":
-                success = await cli.register(email, password)
+                email = input("Email (Enter=使用預設): ").strip() or DEFAULT_EMAIL
+                username = input("Username (Enter=由 email 推導): ").strip() or None
+                password = input("Password (Enter=使用預設): ").strip() or DEFAULT_PASSWORD
+                success = await cli.register(email, password, username=username)
             else:
                 cli.print_error("無效選項")
                 continue
@@ -649,7 +661,7 @@ async def create_new_project(cli: RefactorCLI) -> Optional[str]:
     DEFAULT_NAME = "測試專案"
     DEFAULT_REPO = "https://github.com/emilybache/Racing-Car-Katas.git"
     DEFAULT_BRANCH = "main"
-    DEFAULT_PROMPT = "分析此專案並生成重構計劃，請專注在 /Python 的資料夾，我想要把裡面的python 轉成 go lang，並存入 ./memory/plan.md 檔案，不需要使用者確認後就直接執行所有的計劃，把它完整重構完成"
+    DEFAULT_SPEC = "分析此專案並生成重構計劃，請專注在 /Python 的資料夾，我想要把裡面的python 轉成 go lang，並存入 ./memory/plan.md 檔案，不需要使用者確認後就直接執行所有的計劃，把它完整重構完成"
 
     cli.print_info(f"預設測試 Repository: {DEFAULT_REPO}")
     use_default = input("是否使用預設測試專案？(Enter=是, n=自訂): ").strip().lower()
@@ -658,15 +670,15 @@ async def create_new_project(cli: RefactorCLI) -> Optional[str]:
         name = DEFAULT_NAME
         repo_url = DEFAULT_REPO
         branch = DEFAULT_BRANCH
-        init_prompt = DEFAULT_PROMPT
+        spec = DEFAULT_SPEC
         cli.print_success(f"使用預設專案: {name}")
     else:
         name = input("專案名稱: ").strip()
         repo_url = input("Repository URL: ").strip()
         branch = input("Branch (預設 main): ").strip() or "main"
-        init_prompt = input("初始提示詞 (Enter=使用預設): ").strip() or DEFAULT_PROMPT
+        spec = input("重構規格 spec (Enter=使用預設): ").strip() or DEFAULT_SPEC
 
-    return await cli.create_project(name, repo_url, branch, init_prompt)
+    return await cli.create_project(name, repo_url, branch, spec)
 
 
 def main():

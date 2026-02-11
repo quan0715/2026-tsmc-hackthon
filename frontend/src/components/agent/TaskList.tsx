@@ -29,25 +29,25 @@ export function TaskList({ tasks, compact = false }: TaskListProps) {
   }
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+    <div className="bg-background border border-border rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-800/50 border-b border-gray-800">
-        <div className="flex items-center gap-2 text-sm text-gray-300">
+      <div className="flex items-center justify-between px-3 py-2 bg-secondary/50 border-b border-border">
+        <div className="flex items-center gap-2 text-sm text-secondary-foreground">
           <ListTodo className="w-4 h-4" />
           <span>Tasks</span>
         </div>
         <div className="flex items-center gap-2 text-xs">
           {inProgressCount > 0 && (
-            <span className="text-purple-400">{inProgressCount} running</span>
+            <span className="text-brand-blue-400">{inProgressCount} running</span>
           )}
-          <span className="text-gray-500">
+          <span className="text-muted-foreground">
             {completedCount}/{tasks.length}
           </span>
         </div>
       </div>
 
       {/* Task List */}
-      <div className="divide-y divide-gray-800">
+      <div className="divide-y divide-border">
         {tasks.map((task, index) => (
           <TaskItem key={index} task={task} />
         ))}
@@ -59,17 +59,17 @@ export function TaskList({ tasks, compact = false }: TaskListProps) {
 function TaskItem({ task }: { task: Task }) {
   return (
     <div className={`flex items-start gap-2 px-3 py-2 ${
-      task.status === 'in_progress' ? 'bg-purple-900/10' : ''
+      task.status === 'in_progress' ? 'bg-brand-blue-900/10' : ''
     }`}>
       <div className="flex-shrink-0 mt-0.5">
         <StatusIcon status={task.status} />
       </div>
       <span className={`text-sm ${
         task.status === 'completed' 
-          ? 'text-gray-500 line-through' 
+          ? 'text-muted-foreground line-through' 
           : task.status === 'in_progress'
-          ? 'text-gray-200'
-          : 'text-gray-400'
+          ? 'text-secondary-foreground'
+          : 'text-muted-foreground'
       }`}>
         {task.content}
       </span>
@@ -83,10 +83,10 @@ function CompactTaskItem({ task }: { task: Task }) {
       <StatusIcon status={task.status} size="sm" />
       <span className={`text-xs ${
         task.status === 'completed' 
-          ? 'text-gray-500 line-through' 
+          ? 'text-muted-foreground line-through' 
           : task.status === 'in_progress'
-          ? 'text-gray-300'
-          : 'text-gray-400'
+          ? 'text-secondary-foreground'
+          : 'text-muted-foreground'
       }`}>
         {task.content}
       </span>
@@ -101,8 +101,8 @@ function StatusIcon({ status, size = 'md' }: { status: Task['status']; size?: 's
     case 'completed':
       return <CheckCircle2 className={`${sizeClass} text-green-500`} />
     case 'in_progress':
-      return <Loader2 className={`${sizeClass} text-purple-400 animate-spin`} />
+      return <Loader2 className={`${sizeClass} text-brand-blue-400 animate-spin`} />
     case 'pending':
-      return <Circle className={`${sizeClass} text-gray-600`} />
+      return <Circle className={`${sizeClass} text-muted-foreground/60`} />
   }
 }
